@@ -1,6 +1,9 @@
+/**
+ * ابزارهای ساخت پاسخ استاندارد.
+ * دلیل بازنویسی: اضافه کردن قابلیت ارسال جزئیات خطا (errors) برای خطاهای اعتبارسنجی.
+ */
 import { Response } from "express";
 
-// ساخت پاسخ موفق استاندارد برای API
 export const sendSuccess = (
   res: Response,
   message: string,
@@ -14,14 +17,15 @@ export const sendSuccess = (
   });
 };
 
-// ساخت پاسخ خطای استاندارد برای API
 export const sendError = (
   res: Response,
   message: string,
-  statusCode = 400
+  statusCode = 400,
+  errors?: unknown
 ) => {
   return res.status(statusCode).json({
     success: false,
     message,
+    ...(errors !== undefined && { errors }),
   });
 };

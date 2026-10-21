@@ -1,3 +1,6 @@
+// ==============================================
+// Generator & Datasource
+// ==============================================
 generator client {
   provider     = "prisma-client"
   output       = "../generated/prisma"
@@ -8,19 +11,70 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id           String         @id @default(uuid()) @db.Uuid
-  fullName     String         @map("full_name") @db.VarChar(120)
-  email        String?        @unique @db.VarChar(255)
-  phone        String?        @unique @db.VarChar(20)
-  passwordHash String         @map("password_hash") @db.VarChar(255)
-  status       AccountStatus  @default(ACTIVE)
-  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  coaching     CoachStudent[] @relation("Coach")
-  training     CoachStudent[] @relation("Student")
-  roles        UserRole[]
+// ==============================================
+// Enums
+// ==============================================
 
+enum Role {
+  STUDENT
+  COACH
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION   // در انتظار تأیید ایمیل
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum CoachStudentStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  CANCELLED
+  ENDED
+}
+
+// ==============================================
+// User & Auth
+// ==============================================
+
+model User {
+  id                 String        @id @default(uuid()) @db.Uuid
+  fullName           String        @map("full_name") @db.VarChar(120)
+  email              String        @unique @db.VarChar(255)
+  phone              String?       @unique @db.VarChar(20)
+  passwordHash       String        @map("password_hash") @db.VarChar(255)
+  status             AccountStatus @default(PENDING_VERIFICATION)
+  
+  // تأییدها
+  emailVerifiedAt    DateTime?     @map("email_verified_at") @db.Timestamptz(3)
+  phoneVerifiedAt    DateTime?     @map("phone_verified_at") @db.Timestamptz(3)
+  
+  // امنیت (فاز ۴ و ۵)
+  lastLoginAt        DateTime?     @map("last_login_at") @db.Timestamptz(3)
+  passwordChangedAt  DateTime?     @map("password_changed_at") @db.Timestamptz(3)
+  failedLoginCount   Int           @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?     @map("locked_until") @db.Timestamptz(3)
+  
+  // Timestamps
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?     @map("deleted_at") @db.Timestamptz(3)
+  
+  // Relations
+  roles              UserRole[]
+  sessions           Session[]
+  passwordResets     PasswordResetToken[]
+  emailVerifications EmailVerificationToken[]
+  
+  coaching           CoachStudent[] @relation("Coach")
+  training           CoachStudent[] @relation("Student")
+
+  @@index([status])
+  @@index([deletedAt])
   @@map("users")
 }
 
@@ -34,6 +88,60 @@ model UserRole {
   @@map("user_roles")
 }
 
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.VarChar(255)
+  userAgent        String?   @map("user_agent") @db.VarChar(500)
+  ipAddress        String?   @map("ip_address") @db.VarChar(45)
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  replacedByHash   String?   @map("replaced_by_hash") @db.VarChar(255)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  email     String    @db.VarChar(255)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
+}
+
+// ==============================================
+// CoachStudent — بدون تغییر تا فاز ۷
+// ==============================================
+
 model CoachStudent {
   id        String             @id @default(uuid()) @db.Uuid
   coachId   String             @map("coach_id") @db.Uuid
@@ -42,29 +150,12 @@ model CoachStudent {
   startedAt DateTime?          @map("started_at") @db.Timestamptz(3)
   createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  coach     User               @relation("Coach", fields: [coachId], references: [id], onDelete: Cascade)
-  student   User               @relation("Student", fields: [studentId], references: [id], onDelete: Cascade)
+  
+  coach   User @relation("Coach", fields: [coachId], references: [id], onDelete: Cascade)
+  student User @relation("Student", fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([coachId, studentId])
   @@index([coachId, status])
   @@index([studentId, status])
   @@map("coach_students")
-}
-
-enum Role {
-  STUDENT
-  COACH
-  ADMIN
-  SUPER_ADMIN
-}
-
-enum AccountStatus {
-  ACTIVE
-  SUSPENDED
-}
-
-enum CoachStudentStatus {
-  PENDING
-  ACTIVE
-  REJECTED
 }

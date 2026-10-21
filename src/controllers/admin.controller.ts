@@ -1,46 +1,39 @@
-
-import { Request, Response, NextFunction } from "express";
-import { Prisma } from "../../generated/prisma/client";
+/**
+ * کنترلرهای مدیریتی.
+ * دلیل بازنویسی: استفاده از ApiError برای پرتاب خطاها و asyncHandler برای حذف try/catch.
+ * این کار باعث می‌شود منطق اصلی برنامه خواناتر باشد.
+ */
+import { Request, Response } from "express";
 import prisma from "../lib/prisma";
-import { sendError, sendSuccess } from "../utils/api-response";
+import { sendSuccess } from "../utils/api-response";
+import { ApiError } from "../utils/ApiError";
+import { asyncHandler } from "../utils/asyncHandler";
 
 // تبدیل شاگرد به مربی؛ فقط توسط Super Admin
-export const promoteToCoach = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
+export const promoteToCoach = asyncHandler(
+  async (req: Request, res: Response) => {
     const rawUserId = req.params.userId;
-    const userId = Array.isArray(rawUserId)
-      ? rawUserId[0]
-      : rawUserId;
+    const userId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
 
     if (!userId) {
-      return sendError(res, "شناسه کاربر معتبر نیست.", 400);
+      throw new ApiError(400, "شناسه کاربر معتبر نیست.");
     }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        roles: true,
-      },
+      include: { roles: true },
     });
 
     if (!user) {
-      return sendError(res, "کاربر پیدا نشد.", 404);
+      throw new ApiError(404, "کاربر پیدا نشد.");
     }
 
     if (user.roles.some((item) => item.role === "SUPER_ADMIN")) {
-      return sendError(
-        res,
-        "نقش Super Admin از این مسیر قابل تغییر نیست.",
-        403
-      );
+      throw new ApiError(403, "نقش Super Admin از این مسیر قابل تغییر نیست.");
     }
 
     if (user.roles.some((item) => item.role === "COACH")) {
-      return sendError(res, "این کاربر از قبل مربی است.", 409);
+      throw new ApiError(409, "این کاربر از قبل مربی است.");
     }
 
     await prisma.userRole.create({
@@ -54,14 +47,5 @@ export const promoteToCoach = async (
       userId: user.id,
       role: "COACH",
     });
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return sendError(res, "این نقش قبلاً ثبت شده است.", 409);
-    }
-
-    return next(error);
   }
-};
+);

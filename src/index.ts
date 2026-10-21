@@ -1,11 +1,11 @@
-
-import "dotenv/config";
+/**
+ * فایل اصلی برای راه‌اندازی سرور.
+ * دلیل استفاده از env: به جای خواندن مستقیم process.env، از کانفیگ معتبرسنجی‌شده استفاده می‌کنیم تا مطمئن شویم پورت درست است.
+ */
 import app from "./app";
+import { env } from "./config/env";
 
-// تعیین پورت سرور
-const PORT = Number(process.env.PORT) || 5000;
-
-// اجرای سرور
-app.listen(PORT, () => {
-  console.log(`Gym Backend is running on http://localhost:${PORT}`);
+// اجرای سرور با پورت خوانده‌شده از کانفیگ
+app.listen(env.PORT, () => {
+  console.log(`Gym Backend is running on http://localhost:${env.PORT}`);
 });

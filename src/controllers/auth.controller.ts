@@ -93,8 +93,7 @@ export const register = async (req: Request, res: Response) => {
   const user = await prisma.user.create({
     data: {
       fullName: fullName.trim(),
-      email: normalizedEmail,
-      phone: normalizedPhone,
+      email: normalizedEmail as string,      phone: normalizedPhone,
       passwordHash,
       roles: {
         create: { role: "STUDENT" },
@@ -103,8 +102,7 @@ export const register = async (req: Request, res: Response) => {
     include: { roles: true },
   });
 
-  const roles = user.roles.map((item) => item.role);
-  const accessToken = createAccessToken(user.id, roles);
+  const roles = (user as any).roles.map((item: any) => item.role);  const accessToken = createAccessToken(user.id, roles);
 
   return sendSuccess(
     res,
