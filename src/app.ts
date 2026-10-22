@@ -11,6 +11,8 @@ import errorMiddleware from "./middlewares/error.middleware";
 import authRoutes from "./routes/auth.routes";
 import adminRoutes from "./routes/admin.routes";
 import coachStudentRoutes from "./routes/coach-student.routes";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger";
 
 const app = express();
 
@@ -19,6 +21,8 @@ app.use(pinoHttp({ logger }));
 
 app.use(express.json());
 
+// مسیر مشاهده مستندات API
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/v1/health", healthRoutes);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/admin", adminRoutes);
