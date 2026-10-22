@@ -1,10 +1,13 @@
-
-import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+/**
+ * میدل‌ور احراز هویت.
+ * دلیل آپدیت: استفاده از تابع verifyAccessToken و ApiError برای مدیریت تمیزتر خطاها.
+ */
+import { Response, NextFunction, Request } from "express";
 import prisma from "../lib/prisma";
-import { sendError } from "../utils/api-response";
+import { ApiError } from "../utils/ApiError";
+import { asyncHandler } from "../utils/asyncHandler";
+import { verifyAccessToken } from "../utils/token.utils";
 
-// اطلاعات کاربر احراز هویت‌شده
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
@@ -12,33 +15,23 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
-// بررسی توکن و دریافت اطلاعات به‌روز کاربر از دیتابیس
-const authMiddleware = async (
+const authMiddleware = asyncHandler(async (
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ) => {
   const authorization = req.headers.authorization;
 
   if (!authorization?.startsWith("Bearer ")) {
-    return sendError(res, "ابتدا وارد حساب کاربری شوید.", 401);
-  }
-
-  const secret = process.env.JWT_SECRET;
-
-  if (!secret) {
-    return next(new Error("JWT_SECRET is not configured"));
+    throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
   }
 
   try {
     const token = authorization.slice(7);
-    const decoded = jwt.verify(token, secret);
+    const decoded = verifyAccessToken(token);
 
-    if (
-      typeof decoded === "string" ||
-      typeof decoded.sub !== "string"
-    ) {
-      return sendError(res, "توکن معتبر نیست.", 401);
+    if (!decoded.sub) {
+      throw new ApiError(401, "توکن معتبر نیست.");
     }
 
     // دریافت وضعیت و نقش‌های فعلی کاربر از دیتابیس
@@ -47,14 +40,12 @@ const authMiddleware = async (
       select: {
         id: true,
         status: true,
-        roles: {
-          select: { role: true },
-        },
+        roles: { select: { role: true } },
       },
     });
 
     if (!user || user.status !== "ACTIVE") {
-      return sendError(res, "حساب کاربری معتبر یا فعال نیست.", 401);
+      throw new ApiError(401, "حساب کاربری معتبر یا فعال نیست.");
     }
 
     req.user = {
@@ -62,14 +53,14 @@ const authMiddleware = async (
       roles: user.roles.map((item) => item.role),
     };
 
-    return next();
+    next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return sendError(res, "توکن نامعتبر یا منقضی شده است.", 401);
+    // اگر خطای JWT بود، پیام مناسب بده
+    if (error instanceof Error && error.name === "JsonWebTokenError") {
+      throw new ApiError(401, "توکن نامعتبر یا منقضی شده است.");
     }
-
-    return next(error);
+    throw error;
   }
-};
+});
 
 export default authMiddleware;

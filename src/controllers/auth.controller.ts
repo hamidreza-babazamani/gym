@@ -1,190 +1,138 @@
-
+/**
+ * کنترلرهای احراز هویت.
+ * دلیل تغییر: اضافه شدن سیستم Refresh Token و ثبت نشست (Session) در دیتابیس.
+ */
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
-import { sendError, sendSuccess } from "../utils/api-response";
+import { sendSuccess, sendError } from "../utils/api-response";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+import { ApiError } from "../utils/ApiError";
+import { asyncHandler } from "../utils/asyncHandler";
+import { generateAccessToken, generateRefreshToken, hashToken } from "../utils/token.utils";
 
-// ساخت Access Token برای کاربر
-const createAccessToken = (userId: string, roles: string[]) => {
-  const secret = process.env.JWT_SECRET;
+// تابع کمکی برای ایجاد نشست جدید (ثبت در دیتابیس)
+const createSession = async (userId: string, req: Request) => {
+  const refreshToken = generateRefreshToken();
+  const hashedToken = hashToken(refreshToken);
+  
+  // تنظیم انقضا برای ۷ روز آینده
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
 
-  if (!secret) {
-    throw new Error("JWT_SECRET is not configured");
-  }
-
-  return jwt.sign({ roles }, secret, {
-    subject: userId,
-    //expiresIn: "15m",
+  await prisma.session.create({
+    data: {
+      userId,
+      refreshTokenHash: hashedToken,
+      expiresAt,
+      userAgent: req.headers["user-agent"] || null,
+      ipAddress: req.ip || null,
+    },
   });
+
+  return refreshToken;
 };
 
 // ثبت‌نام کاربر جدید
-export const register = async (req: Request, res: Response) => {
-  const { fullName, email, phone, password } = req.body ?? {};
-
-  // بررسی اطلاعات ضروری
-  if (
-    typeof fullName !== "string" ||
-    !fullName.trim() ||
-    typeof password !== "string" ||
-    password.length < 8 ||
-    Buffer.byteLength(password, "utf8") > 72
-  ) {
-    return sendError(
-      res,
-      "نام و رمز عبور معتبر وارد کنید؛ رمز باید حداقل ۸ کاراکتر باشد.",
-      400
-    );
-  }
-
-  // حداقل ایمیل یا شماره موبایل باید ارائه شود
-  const normalizedEmail =
-    typeof email === "string" && email.trim()
-      ? email.trim().toLowerCase()
-      : null;
-
-  const normalizedPhone =
-    typeof phone === "string" && phone.trim()
-      ? phone.trim()
-      : null;
-
-  if (!normalizedEmail && !normalizedPhone) {
-    return sendError(res, "ایمیل یا شماره موبایل الزامی است.", 400);
-  }
-
-  if (
-    normalizedEmail &&
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
-  ) {
-    return sendError(res, "فرمت ایمیل معتبر نیست.", 400);
-  }
-
-  if (
-    normalizedPhone &&
-    !/^\+?[\d\s()-]{7,20}$/.test(normalizedPhone)
-  ) {
-    return sendError(res, "فرمت شماره موبایل معتبر نیست.", 400);
-  }
+export const register = asyncHandler(async (req: Request, res: Response) => {
+  const { fullName, email, phone, password } = req.body;
 
   // بررسی تکراری نبودن ایمیل یا شماره موبایل
   const duplicate = await prisma.user.findFirst({
     where: {
       OR: [
-        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-        ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+        { email },
+        ...(phone ? [{ phone }] : []),
       ],
     },
   });
 
   if (duplicate) {
-    return sendError(
-      res,
-      "این ایمیل یا شماره موبایل قبلاً ثبت شده است.",
-      409
-    );
+    throw new ApiError(409, "این ایمیل یا شماره موبایل قبلاً ثبت شده است.");
   }
 
-  // هش کردن رمز عبور قبل از ذخیره
+  // هش کردن رمز عبور
   const passwordHash = await bcrypt.hash(password, 12);
 
-  // نقش کاربر فقط در سمت سرور تعیین می‌شود
+  // ایجاد کاربر در دیتابیس
   const user = await prisma.user.create({
     data: {
-      fullName: fullName.trim(),
-      email: normalizedEmail as string,      phone: normalizedPhone,
+      fullName,
+      email,
+      phone,
       passwordHash,
-      roles: {
-        create: { role: "STUDENT" },
-      },
+      roles: { create: { role: "STUDENT" } },
+       status: "ACTIVE", // فعلاً برای تست فعال است، در فاز تأیید ایمیل حذف می‌شود
     },
     include: { roles: true },
   });
 
-  const roles = (user as any).roles.map((item: any) => item.role);  const accessToken = createAccessToken(user.id, roles);
+  const roles = user.roles.map((item) => item.role);
+  
+  // ساخت توکن‌ها
+  const accessToken = generateAccessToken(user.id, roles);
+  const refreshToken = await createSession(user.id, req);
 
   return sendSuccess(
     res,
     "ثبت‌نام با موفقیت انجام شد.",
     {
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        roles,
-      },
+      user: { id: user.id, fullName: user.fullName, email: user.email, phone: user.phone, roles },
       accessToken,
+      refreshToken,
     },
     201
   );
-};
+});
 
-// ورود با ایمیل یا شماره موبایل
-export const login = async (req: Request, res: Response) => {
-  // دریافت ایمیل و رمز عبور از درخواست
-  const { email, password } = req.body ?? {};
+// ورود با ایمیل
+export const login = asyncHandler(async (req: Request, res: Response) => {
+  const { email, password } = req.body;
 
-  // بررسی معتبر بودن اطلاعات ورودی
-  if (
-    typeof email !== "string" ||
-    !email.trim() ||
-    typeof password !== "string" ||
-    !password
-  ) {
-    return sendError(res, "اطلاعات ورود ناقص است.", 400);
-  }
-
-  // جست‌وجوی کاربر با ایمیل
+  // جست‌وجوی کاربر
   const user = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
+    where: { email },
     include: { roles: true },
   });
 
   // بررسی وجود کاربر و صحیح بودن رمز عبور
-  if (
-    !user ||
-    !(await bcrypt.compare(password, user.passwordHash))
-  ) {
-    return sendError(res, "اطلاعات ورود صحیح نیست.", 401);
+  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    // برای جلوگیری از افشای وجود حساب، پیام یکسان برمی‌گردانیم
+    throw new ApiError(401, "اطلاعات ورود صحیح نیست.");
   }
 
   // جلوگیری از ورود حساب‌های غیرفعال
   if (user.status !== "ACTIVE") {
-    return sendError(res, "حساب کاربری غیرفعال است.", 403);
+    throw new ApiError(403, "حساب کاربری غیرفعال یا تأیید نشده است.");
   }
 
-  // استخراج نقش‌های کاربر و ساخت توکن
   const roles = user.roles.map((item) => item.role);
-  const accessToken = createAccessToken(user.id, roles);
+  
+  // ساخت توکن‌ها
+  const accessToken = generateAccessToken(user.id, roles);
+  const refreshToken = await createSession(user.id, req);
 
-  // ارسال پاسخ موفق
-  return sendSuccess(res, "ورود موفقیت‌آمیز بود.", {
-    user: {
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      phone: user.phone,
-      roles,
-    },
-    accessToken,
+  // آپدیت زمان آخرین ورود
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
   });
-};
+
+  return sendSuccess(res, "ورود موفقیت‌آمیز بود.", {
+    user: { id: user.id, fullName: user.fullName, email: user.email, phone: user.phone, roles },
+    accessToken,
+    refreshToken,
+  });
+});
 
 // دریافت اطلاعات کاربر واردشده
-export const getMe = async (
-  req: AuthenticatedRequest,
-  res: Response
-) => {
-  // دریافت شناسه کاربر از Middleware احراز هویت
+export const getMe = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.id;
 
   if (!userId) {
-    return sendError(res, "احراز هویت انجام نشده است.", 401);
+    throw new ApiError(401, "احراز هویت انجام نشده است.");
   }
 
-  // دریافت اطلاعات به‌روز کاربر از دیتابیس
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -193,18 +141,13 @@ export const getMe = async (
       email: true,
       phone: true,
       status: true,
-      roles: {
-        select: { role: true },
-      },
+      roles: { select: { role: true } },
     },
   });
 
-  if (!user || user.status !== "ACTIVE") {
-    return sendError(res, "حساب کاربری معتبر یا فعال نیست.", 401);
+  if (!user) {
+    throw new ApiError(404, "کاربر پیدا نشد.");
   }
-
-  // استخراج نقش‌های کاربر
-  const roles = user.roles.map((item) => item.role);
 
   return sendSuccess(res, "اطلاعات کاربر دریافت شد.", {
     user: {
@@ -212,7 +155,66 @@ export const getMe = async (
       fullName: user.fullName,
       email: user.email,
       phone: user.phone,
-      roles,
+      roles: user.roles.map((item) => item.role),
     },
   });
-};
+});
+// تازه‌سازی توکن دسترسی (Refresh Token)
+export const refresh = asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    throw new ApiError(400, "توکن تازه‌سازی ارسال نشده است.");
+  }
+
+  const hashedToken = hashToken(refreshToken);
+
+  // پیدا کردن نشست فعال با این توکن
+  const session = await prisma.session.findUnique({
+    where: { refreshTokenHash: hashedToken },
+    include: { user: { include: { roles: true } } },
+  });
+
+  // بررسی اینکه نشست وجود دارد، منقضی یا باطل نشده باشد
+  if (!session || session.revokedAt || session.expiresAt < new Date()) {
+    throw new ApiError(401, "توکن تازه‌سازی نامعتبر یا منقضی شده است.");
+  }
+
+  // بررسی اینکه کاربر همچنان فعال است
+  if (session.user.status !== "ACTIVE") {
+    throw new ApiError(403, "حساب کاربری غیرفعال است.");
+  }
+
+  // چرخش توکن (ابطال نشست قبلی و ساخت نشست جدید)
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { revokedAt: new Date() },
+  });
+
+  const newRefreshToken = await createSession(session.user.id, req);
+  const roles = session.user.roles.map((item) => item.role);
+  const newAccessToken = generateAccessToken(session.user.id, roles);
+
+  return sendSuccess(res, "توکن با موفقیت تازه‌سازی شد.", {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+  });
+});
+// خروج از حساب کاربری (ابطال نشست)
+export const logout = asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    throw new ApiError(400, "توکن تازه‌سازی ارسال نشده است.");
+  }
+
+  const hashedToken = hashToken(refreshToken);
+
+  // باطل کردن نشست (اگر وجود داشته باشد)
+  await prisma.session.updateMany({
+    where: { refreshTokenHash: hashedToken, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+
+  return sendSuccess(res, "خروج با موفقیت انجام شد.");
+});
