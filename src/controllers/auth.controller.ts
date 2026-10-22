@@ -159,6 +159,7 @@ export const getMe = asyncHandler(async (req: AuthenticatedRequest, res: Respons
     },
   });
 });
+
 // تازه‌سازی توکن دسترسی (Refresh Token)
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
@@ -200,6 +201,7 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     refreshToken: newRefreshToken,
   });
 });
+
 // خروج از حساب کاربری (ابطال نشست)
 export const logout = asyncHandler(async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
@@ -217,4 +219,126 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   });
 
   return sendSuccess(res, "خروج با موفقیت انجام شد.");
+});
+
+// تغییر رمز عبور توسط کاربر لاگین‌شده
+export const changePassword = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!userId) {
+    throw new ApiError(401, "احراز هویت انجام نشده است.");
+  }
+
+  // دریافت کاربر از دیتابیس
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new ApiError(404, "کاربر پیدا نشد.");
+  }
+
+  // بررسی صحت رمز عبور فعلی
+  const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!isMatch) {
+    throw new ApiError(400, "رمز عبور فعلی صحیح نیست.");
+  }
+
+  // هش کردن رمز جدید
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+  // آپدیت رمز عبور و ثبت زمان تغییر آن
+  await prisma.user.update({
+    where: { id: userId },
+    data: { 
+      passwordHash: newPasswordHash,
+      passwordChangedAt: new Date()
+    },
+  });
+
+  // به دلایل امنیتی، تمام نشست‌های دیگر (روی دستگاه‌های دیگر) را باطل می‌کنیم
+  await prisma.session.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+
+  return sendSuccess(res, "رمز عبور با موفقیت تغییر کرد. لطفاً دوباره وارد شوید.");
+});
+
+// درخواست فراموشی رمز عبور
+export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body;
+
+  // پیدا کردن کاربر
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  // طبق استانداردهای امنیتی، حتی اگر کاربر وجود نداشته باشد، پاسخ موفق می‌دهیم 
+  // تا از افشای وجود یا عدم وجود حساب جلوگیری شود.
+  if (user) {
+    const resetToken = generateRefreshToken(); // استفاده از تابع تولید توکن تصادفی
+    const hashedToken = hashToken(resetToken);
+    
+    // انقضا: ۱ ساعت آینده
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    // ذخیره توکن در دیتابیس (قبل از این، توکن‌های قبلی کاربر را باطل می‌کنیم)
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashedToken,
+        expiresAt,
+      },
+    });
+
+    // در محیط واقعی، اینجا باید توکن را با ایمیل برای کاربر ارسال کنیم.
+    // فعلاً به عنوان تست، آن را در کنسول چاپ می‌کنیم.
+    console.log(`[TEST] Password reset token for ${email}: ${resetToken}`);
+  }
+
+  return sendSuccess(res, "اگر این ایمیل در سیستم ثبت شده باشد، لینک بازیابی ارسال خواهد شد.");
+});
+
+// تنظیم رمز عبور جدید با توکن
+export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+
+  const hashedToken = hashToken(token);
+
+  // پیدا کردن توکن معتبر
+  const resetRecord = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash: hashedToken },
+  });
+
+  // بررسی اینکه توکن وجود دارد، منقضی نشده و قبلاً استفاده نشده باشد
+  if (!resetRecord || resetRecord.expiresAt < new Date() || resetRecord.usedAt) {
+    throw new ApiError(400, "توکن بازیابی نامعتبر یا منقضی شده است.");
+  }
+
+  // هش کردن رمز جدید
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+
+  // آپدیت رمز عبور
+  await prisma.user.update({
+    where: { id: resetRecord.userId },
+    data: { 
+      passwordHash: newPasswordHash,
+      passwordChangedAt: new Date()
+    },
+  });
+
+  // علامت‌گذاری توکن به عنوان استفاده‌شده و باطل کردن تمام نشست‌ها
+  await prisma.passwordResetToken.update({
+    where: { id: resetRecord.id },
+    data: { usedAt: new Date() },
+  });
+  
+  await prisma.session.updateMany({
+    where: { userId: resetRecord.userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+
+  return sendSuccess(res, "رمز عبور با موفقیت بازیابی شد. لطفاً وارد شوید.");
 });

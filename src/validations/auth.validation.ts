@@ -19,3 +19,21 @@ export const loginSchema = z.object({
     password: z.string().min(1, "رمز عبور الزامی است."),
   }),
 });
+export const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, "رمز عبور فعلی الزامی است."),
+    newPassword: z.string().min(8, "رمز عبور جدید باید حداقل ۸ کاراکتر باشد.").max(72, "رمز عبور بیش از حد طولانی است."),
+  }),
+});
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email("فرمت ایمیل معتبر نیست."),
+  }),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, "توکن الزامی است."),
+    newPassword: z.string().min(8, "رمز عبور باید حداقل ۸ کاراکتر باشد.").max(72),
+  }),
+});

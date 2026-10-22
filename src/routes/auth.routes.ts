@@ -1,12 +1,17 @@
 /**
  * مسیرهای مربوط به احراز هویت.
- * دلیل آپدیت: اضافه شدن مسیرهای تازه‌سازی توکن (refresh) و خروج (logout).
  */
 import { Router } from "express";
-import { login, register, getMe, refresh, logout } from "../controllers/auth.controller";
+import { 
+  login, register, getMe, refresh, logout, changePassword, 
+  forgotPassword, resetPassword 
+} from "../controllers/auth.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import { validate } from "../middlewares/validate.middleware";
-import { registerSchema, loginSchema } from "../validations/auth.validation";
+import { 
+  registerSchema, loginSchema, changePasswordSchema, 
+  forgotPasswordSchema, resetPasswordSchema 
+} from "../validations/auth.validation";
 import { z } from "zod";
 
 const router = Router();
@@ -32,5 +37,14 @@ router.post("/refresh", validate(refreshSchema), refresh);
 
 // خروج
 router.post("/logout", validate(refreshSchema), logout);
+
+// تغییر رمز عبور (نیاز به لاگین)
+router.patch("/change-password", authMiddleware, validate(changePasswordSchema), changePassword);
+
+// درخواست بازیابی رمز عبور
+router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
+
+// تنظیم رمز عبور جدید
+router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 
 export default router;
