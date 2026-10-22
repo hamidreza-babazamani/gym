@@ -47,8 +47,9 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     },
   });
 
-  if (duplicate) {
-    throw new ApiError(409, "این ایمیل یا شماره موبایل قبلاً ثبت شده است.");
+    if (duplicate) {
+    // به دلایل امنیتی (جلوگیری از افشای وجود حساب)، پیام دقیق نمی‌دهیم
+    throw new ApiError(400, "امکان ثبت‌نام با این اطلاعات وجود ندارد. اگر قبلاً ثبت‌نام کرده‌اید، رمز خود را بازیابی کنید.");
   }
 
   // هش کردن رمز عبور
@@ -163,25 +164,34 @@ export const getMe = asyncHandler(async (req: AuthenticatedRequest, res: Respons
 // تازه‌سازی توکن دسترسی (Refresh Token)
 export const refresh = asyncHandler(async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
-
   if (!refreshToken) {
     throw new ApiError(400, "توکن تازه‌سازی ارسال نشده است.");
   }
 
   const hashedToken = hashToken(refreshToken);
-
-  // پیدا کردن نشست فعال با این توکن
   const session = await prisma.session.findUnique({
     where: { refreshTokenHash: hashedToken },
     include: { user: { include: { roles: true } } },
   });
 
-  // بررسی اینکه نشست وجود دارد، منقضی یا باطل نشده باشد
-  if (!session || session.revokedAt || session.expiresAt < new Date()) {
+  if (!session) {
     throw new ApiError(401, "توکن تازه‌سازی نامعتبر یا منقضی شده است.");
   }
 
-  // بررسی اینکه کاربر همچنان فعال است
+  // تشخیص استفاده مجدد (Reuse Detection)
+  if (session.revokedAt) {
+    // توکن قبلاً باطل شده، پس احتمالاً دزدیده شده. تمام نشست‌های کاربر را باطل می‌کنیم.
+    await prisma.session.updateMany({
+      where: { userId: session.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    throw new ApiError(401, "استفاده غیرمجاز شناسایی شد. لطفاً دوباره وارد شوید.");
+  }
+
+  if (session.expiresAt < new Date()) {
+    throw new ApiError(401, "توکن تازه‌سازی منقضی شده است.");
+  }
+
   if (session.user.status !== "ACTIVE") {
     throw new ApiError(403, "حساب کاربری غیرفعال است.");
   }
@@ -304,40 +314,40 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
 // تنظیم رمز عبور جدید با توکن
 export const resetPassword = asyncHandler(async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
-
   const hashedToken = hashToken(token);
 
-  // پیدا کردن توکن معتبر
   const resetRecord = await prisma.passwordResetToken.findUnique({
     where: { tokenHash: hashedToken },
   });
 
-  // بررسی اینکه توکن وجود دارد، منقضی نشده و قبلاً استفاده نشده باشد
   if (!resetRecord || resetRecord.expiresAt < new Date() || resetRecord.usedAt) {
     throw new ApiError(400, "توکن بازیابی نامعتبر یا منقضی شده است.");
   }
 
-  // هش کردن رمز جدید
   const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
-  // آپدیت رمز عبور
-  await prisma.user.update({
-    where: { id: resetRecord.userId },
-    data: { 
-      passwordHash: newPasswordHash,
-      passwordChangedAt: new Date()
-    },
-  });
+  // استفاده از تراکنش برای جلوگیری از Race Condition (درخواست‌های همزمان)
+  await prisma.$transaction(async (tx) => {
+    // ۱. علامت‌گذاری توکن به عنوان استفاده‌شده
+    await tx.passwordResetToken.update({
+      where: { id: resetRecord.id },
+      data: { usedAt: new Date() },
+    });
 
-  // علامت‌گذاری توکن به عنوان استفاده‌شده و باطل کردن تمام نشست‌ها
-  await prisma.passwordResetToken.update({
-    where: { id: resetRecord.id },
-    data: { usedAt: new Date() },
-  });
-  
-  await prisma.session.updateMany({
-    where: { userId: resetRecord.userId, revokedAt: null },
-    data: { revokedAt: new Date() },
+    // ۲. آپدیت رمز عبور
+    await tx.user.update({
+      where: { id: resetRecord.userId },
+      data: { 
+        passwordHash: newPasswordHash,
+        passwordChangedAt: new Date()
+      },
+    });
+
+    // ۳. باطل کردن تمام نشست‌ها
+    await tx.session.updateMany({
+      where: { userId: resetRecord.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   });
 
   return sendSuccess(res, "رمز عبور با موفقیت بازیابی شد. لطفاً وارد شوید.");
