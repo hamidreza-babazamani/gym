@@ -4,13 +4,13 @@
 import { Router } from "express";
 import { 
   login, register, getMe, refresh, logout, changePassword, 
-  forgotPassword, resetPassword 
+  forgotPassword, resetPassword, updateProfile 
 } from "../controllers/auth.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { 
   registerSchema, loginSchema, changePasswordSchema, 
-  forgotPasswordSchema, resetPasswordSchema 
+  forgotPasswordSchema, resetPasswordSchema, updateProfileSchema 
 } from "../validations/auth.validation";
 import { z } from "zod";
 
@@ -31,6 +31,9 @@ router.post("/login", validate(loginSchema), login);
 
 // دریافت پروفایل کاربر با توکن معتبر
 router.get("/me", authMiddleware, getMe);
+
+// ویرایش پروفایل کاربر (نیاز به لاگین)
+router.patch("/profile", authMiddleware, validate(updateProfileSchema), updateProfile);
 
 // تازه‌سازی توکن
 router.post("/refresh", validate(refreshSchema), refresh);

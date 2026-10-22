@@ -34,7 +34,7 @@ describe("Password Reset", () => {
   it("باید با توکن معتبر، رمز عبور را بازیابی کند", async () => {
     // برای تست، ما مستقیماً یک توکن در دیتابیس می‌سازیم (چون ایمیل واقعی ارسال نمی‌شود)
     const user = await prisma.user.findUnique({ where: { email } });
-    const rawToken = "test-reset-token-12345";
+    const rawToken = `test-reset-token-${Date.now()}`;
     const hashed = hashToken(rawToken);
     
     await prisma.passwordResetToken.create({

@@ -342,3 +342,41 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
 
   return sendSuccess(res, "رمز عبور با موفقیت بازیابی شد. لطفاً وارد شوید.");
 });
+
+// ویرایش پروفایل کاربر
+export const updateProfile = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  const { fullName, phone } = req.body;
+
+  if (!userId) {
+    throw new ApiError(401, "احراز هویت انجام نشده است.");
+  }
+
+  // اگر شماره موبایل جدیدی فرستاده شده، باید چک کنیم تکراری نباشد
+  if (phone) {
+    const duplicatePhone = await prisma.user.findUnique({
+      where: { phone },
+    });
+    if (duplicatePhone && duplicatePhone.id !== userId) {
+      throw new ApiError(409, "این شماره موبایل قبلاً برای کاربر دیگری ثبت شده است.");
+    }
+  }
+
+  // آپدیت اطلاعات کاربر
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(fullName && { fullName }),
+      ...(phone && { phone }),
+    },
+  });
+
+  return sendSuccess(res, "پروفایل با موفقیت ویرایش شد.", {
+    user: {
+      id: updatedUser.id,
+      fullName: updatedUser.fullName,
+      email: updatedUser.email,
+      phone: updatedUser.phone,
+    },
+  });
+});

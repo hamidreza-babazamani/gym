@@ -37,3 +37,9 @@ export const resetPasswordSchema = z.object({
     newPassword: z.string().min(8, "رمز عبور باید حداقل ۸ کاراکتر باشد.").max(72),
   }),
 });
+export const updateProfileSchema = z.object({
+  body: z.object({
+    fullName: z.string().min(3, "نام کامل باید حداقل ۳ کاراکتر باشد.").max(120).optional(),
+    phone: z.string().regex(/^\+?[\d\s()-]{7,20}$/, "فرمت شماره موبایل معتبر نیست.").optional(),
+  }),
+});
