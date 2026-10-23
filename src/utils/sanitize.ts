@@ -1,13 +1,19 @@
 /**
  * پاکسازی اطلاعات کاربر.
- * دلیل استفاده: جلوگیری از نشت فیلدهای حساس مثل passwordHash.
+ * دلیل اصلاح: استفاده از تایپ دقیق به جای any.
  */
-export const sanitizeUser = (user: any) => {
+import { User, UserRole } from "../../generated/prisma/client";
+
+type UserWithRoles = User & {
+  roles?: { role: string }[];
+};
+
+export const sanitizeUser = (user: UserWithRoles) => {
   return {
     id: user.id,
     fullName: user.fullName,
     email: user.email,
     phone: user.phone,
-    roles: user.roles?.map((r: any) => r.role) || [],
+    roles: user.roles?.map((r) => r.role) || [],
   };
 };

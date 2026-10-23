@@ -82,7 +82,6 @@ model User {
   
   memberships        Membership[]
   
-  // ارتباطات فاز ۹ (برنامه‌های تمرینی)
   programs           Program[]
   programAssignments ProgramAssignment[]
   exerciseLogs       ExerciseLog[]
@@ -153,7 +152,7 @@ model EmailVerificationToken {
 }
 
 // ==============================================
-// Sport (رشته ورزشی)
+// Sport
 // ==============================================
 
 model Sport {
@@ -220,6 +219,7 @@ model Membership {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
 
+  // نکته: ایندکس یکتای شرطی (فقط برای ACTIVE) در migration دستی اضافه می‌شود
   @@index([userId, status])
   @@index([sportId, status])
   @@index([endsAt])
@@ -227,7 +227,7 @@ model Membership {
 }
 
 // ==============================================
-// Exercise (تمرین - فاز ۹)
+// Exercise
 // ==============================================
 
 model Exercise {
@@ -244,7 +244,7 @@ model Exercise {
 }
 
 // ==============================================
-// Program (برنامه تمرینی - فاز ۹)
+// Program
 // ==============================================
 
 model Program {
@@ -265,7 +265,7 @@ model Program {
 }
 
 // ==============================================
-// ProgramDay (روزهای برنامه - فاز ۹)
+// ProgramDay
 // ==============================================
 
 model ProgramDay {
@@ -282,7 +282,7 @@ model ProgramDay {
 }
 
 // ==============================================
-// ProgramExercise (تمرین‌های داخل برنامه - فاز ۹)
+// ProgramExercise
 // ==============================================
 
 model ProgramExercise {
@@ -304,7 +304,7 @@ model ProgramExercise {
 }
 
 // ==============================================
-// ProgramAssignment (اختصاص برنامه به ورزشکار - فاز ۹)
+// ProgramAssignment
 // ==============================================
 
 model ProgramAssignment {
@@ -323,7 +323,7 @@ model ProgramAssignment {
 }
 
 // ==============================================
-// ExerciseLog (ثبت اجرای واقعی تمرین - فاز ۹)
+// ExerciseLog
 // ==============================================
 
 model ExerciseLog {

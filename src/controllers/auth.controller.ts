@@ -10,6 +10,7 @@ import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generateAccessToken, generateRefreshToken, hashToken } from "../utils/token.utils";
+import { env } from "../config/env";
 
 // تابع کمکی برای ایجاد نشست جدید (ثبت در دیتابیس)
 const createSession = async (userId: string, req: Request) => {
@@ -180,7 +181,6 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
 
   // تشخیص استفاده مجدد (Reuse Detection)
   if (session.revokedAt) {
-    // توکن قبلاً باطل شده، پس احتمالاً دزدیده شده. تمام نشست‌های کاربر را باطل می‌کنیم.
     await prisma.session.updateMany({
       where: { userId: session.userId, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -196,11 +196,15 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(403, "حساب کاربری غیرفعال است.");
   }
 
-  // چرخش توکن (ابطال نشست قبلی و ساخت نشست جدید)
-  await prisma.session.update({
-    where: { id: session.id },
+  // چرخش توکن به صورت اتمیک (جلوگیری از Race Condition)
+  const updatedCount = await prisma.session.updateMany({
+    where: { id: session.id, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+
+  if (updatedCount.count === 0) {
+    throw new ApiError(401, "توکن تازه‌سازی قبلاً استفاده شده است.");
+  }
 
   const newRefreshToken = await createSession(session.user.id, req);
   const roles = session.user.roles.map((item) => item.role);
@@ -304,8 +308,10 @@ export const forgotPassword = asyncHandler(async (req: Request, res: Response) =
     });
 
     // در محیط واقعی، اینجا باید توکن را با ایمیل برای کاربر ارسال کنیم.
-    // فعلاً به عنوان تست، آن را در کنسول چاپ می‌کنیم.
-    console.log(`[TEST] Password reset token for ${email}: ${resetToken}`);
+    // در محیط توسعه، توکن را در کنسول چاپ می‌کنیم (فقط برای تست).
+    if (env.NODE_ENV === "development") {
+      console.log(`[DEV ONLY] Password reset token for ${email}: ${resetToken}`);
+    }
   }
 
   return sendSuccess(res, "اگر این ایمیل در سیستم ثبت شده باشد، لینک بازیابی ارسال خواهد شد.");

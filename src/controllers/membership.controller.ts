@@ -9,6 +9,7 @@ import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { expireOldMemberships } from "../utils/membership.utils";
+import { MembershipStatus } from "../../generated/prisma/client";
 
 // ایجاد عضویت جدید (توسط ادمین)
 export const createMembership = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -60,7 +61,7 @@ export const listMemberships = asyncHandler(async (req: AuthenticatedRequest, re
     where: {
       userId: targetUserId,
       ...(sportId ? { sportId: String(sportId) } : {}),
-      ...(status ? { status: status as any } : {}),
+      ...(status ? { status: status as MembershipStatus } : {}),
     },
     include: {
       user: { select: { id: true, fullName: true, email: true } },
@@ -112,17 +113,25 @@ export const updateMembership = asyncHandler(async (req: AuthenticatedRequest, r
     throw new ApiError(404, "عضویت پیدا نشد.");
   }
 
-  // بررسی دسترسی: ادمین‌ها می‌توانند همه را ویرایش کنند، اما در آینده می‌توان محدودیت شعبه اضافه کرد
+  // بررسی دسترسی: ادمین‌ها می‌توانند همه را ویرایش کنند
   const isAdmin = currentUser.roles.includes("ADMIN") || currentUser.roles.includes("SUPER_ADMIN");
   if (!isAdmin) {
     throw new ApiError(403, "شما اجازه ویرایش این عضویت را ندارید.");
   }
 
+  // بررسی اعتبار تاریخ‌ها پس از اعمال تغییرات
+  const finalStartsAt = startsAt ? new Date(startsAt) : membership.startsAt;
+  const finalEndsAt = endsAt ? new Date(endsAt) : membership.endsAt;
+
+  if (finalEndsAt <= finalStartsAt) {
+    throw new ApiError(400, "تاریخ پایان باید بعد از تاریخ شروع باشد.");
+  }
+
   const updated = await prisma.membership.update({
     where: { id },
     data: {
-      ...(startsAt ? { startsAt: new Date(startsAt) } : {}),
-      ...(endsAt ? { endsAt: new Date(endsAt) } : {}),
+      ...(startsAt ? { startsAt: finalStartsAt } : {}),
+      ...(endsAt ? { endsAt: finalEndsAt } : {}),
       ...(status ? { status } : {}),
     },
   });
