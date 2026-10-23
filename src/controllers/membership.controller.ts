@@ -1,36 +1,31 @@
 /**
  * کنترلرهای مدیریت عضویت‌ها.
- * دلیل استفاده: پیاده‌سازی عملیات CRUD و مدیریت وضعیت‌های زمانی.
+ * دلیل آپدیت: اضافه شدن تشخیص خودکار عضویت‌های منقضی‌شده در زمان واکشی.
  */
-import { Request, Response } from "express";
+import { Response } from "express";
 import prisma from "../lib/prisma";
 import { sendSuccess } from "../utils/api-response";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+import { expireOldMemberships } from "../utils/membership.utils";
 
 // ایجاد عضویت جدید (توسط ادمین)
-export const createMembership = asyncHandler(async (req: Request, res: Response) => {
+export const createMembership = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { userId, sportId, startsAt, endsAt } = req.body;
 
-  // بررسی وجود کاربر
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new ApiError(404, "کاربر پیدا نشد.");
   }
 
-  // بررسی وجود رشته
   const sport = await prisma.sport.findUnique({ where: { id: sportId } });
   if (!sport) {
     throw new ApiError(404, "رشته ورزشی پیدا نشد.");
   }
 
-  // بررسی اینکه آیا کاربر از قبل عضویت فعالی در این رشته دارد
   const existing = await prisma.membership.findFirst({
-    where: {
-      userId,
-      sportId,
-      status: "ACTIVE",
-    },
+    where: { userId, sportId, status: "ACTIVE" },
   });
 
   if (existing) {
@@ -50,13 +45,20 @@ export const createMembership = asyncHandler(async (req: Request, res: Response)
   return sendSuccess(res, "عضویت با موفقیت ایجاد شد.", { membership }, 201);
 });
 
-// دریافت لیست عضویت‌ها (با فیلتر)
-export const listMemberships = asyncHandler(async (req: Request, res: Response) => {
+// دریافت لیست عضویت‌ها (با کنترل دسترسی و تشخیص انقضا)
+export const listMemberships = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { userId, sportId, status } = req.query;
+  const currentUser = req.user!;
+
+  const isAdmin = currentUser.roles.includes("ADMIN") || currentUser.roles.includes("SUPER_ADMIN");
+  const targetUserId = isAdmin && userId ? String(userId) : currentUser.id;
+
+  // به‌روزرسانی خودکار عضویت‌های منقضی‌شده قبل از واکشی
+  await expireOldMemberships(targetUserId);
 
   const memberships = await prisma.membership.findMany({
     where: {
-      ...(userId ? { userId: String(userId) } : {}),
+      userId: targetUserId,
       ...(sportId ? { sportId: String(sportId) } : {}),
       ...(status ? { status: status as any } : {}),
     },
@@ -70,9 +72,13 @@ export const listMemberships = asyncHandler(async (req: Request, res: Response) 
   return sendSuccess(res, "لیست عضویت‌ها دریافت شد.", { memberships });
 });
 
-// دریافت جزئیات یک عضویت
-export const getMembership = asyncHandler(async (req: Request, res: Response) => {
+// دریافت جزئیات یک عضویت (با کنترل دسترسی و تشخیص انقضا)
+export const getMembership = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
+  const currentUser = req.user!;
+
+  // به‌روزرسانی خودکار عضویت‌های منقضی‌شده قبل از واکشی
+  await expireOldMemberships(currentUser.id);
 
   const membership = await prisma.membership.findUnique({
     where: { id },
@@ -86,18 +92,30 @@ export const getMembership = asyncHandler(async (req: Request, res: Response) =>
     throw new ApiError(404, "عضویت پیدا نشد.");
   }
 
+  const isAdmin = currentUser.roles.includes("ADMIN") || currentUser.roles.includes("SUPER_ADMIN");
+  if (!isAdmin && membership.userId !== currentUser.id) {
+    throw new ApiError(403, "شما اجازه دسترسی به این اطلاعات را ندارید.");
+  }
+
   return sendSuccess(res, "جزئیات عضویت دریافت شد.", { membership });
 });
 
 // ویرایش عضویت (تمدید یا تغییر وضعیت)
-export const updateMembership = asyncHandler(async (req: Request, res: Response) => {
+export const updateMembership = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const { startsAt, endsAt, status } = req.body;
+  const currentUser = req.user!;
 
   const membership = await prisma.membership.findUnique({ where: { id } });
 
   if (!membership) {
     throw new ApiError(404, "عضویت پیدا نشد.");
+  }
+
+  // بررسی دسترسی: ادمین‌ها می‌توانند همه را ویرایش کنند، اما در آینده می‌توان محدودیت شعبه اضافه کرد
+  const isAdmin = currentUser.roles.includes("ADMIN") || currentUser.roles.includes("SUPER_ADMIN");
+  if (!isAdmin) {
+    throw new ApiError(403, "شما اجازه ویرایش این عضویت را ندارید.");
   }
 
   const updated = await prisma.membership.update({
@@ -112,14 +130,21 @@ export const updateMembership = asyncHandler(async (req: Request, res: Response)
   return sendSuccess(res, "عضویت با موفقیت ویرایش شد.", { membership: updated });
 });
 
-// لغو عضویت
-export const cancelMembership = asyncHandler(async (req: Request, res: Response) => {
+// لغو عضویت (توسط ادمین)
+export const cancelMembership = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
+  const currentUser = req.user!;
 
   const membership = await prisma.membership.findUnique({ where: { id } });
 
   if (!membership) {
     throw new ApiError(404, "عضویت پیدا نشد.");
+  }
+
+  // بررسی دسترسی ادمین
+  const isAdmin = currentUser.roles.includes("ADMIN") || currentUser.roles.includes("SUPER_ADMIN");
+  if (!isAdmin) {
+    throw new ApiError(403, "شما اجازه لغو این عضویت را ندارید.");
   }
 
   if (membership.status !== "ACTIVE") {

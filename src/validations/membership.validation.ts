@@ -1,6 +1,6 @@
 /**
  * قوانین اعتبارسنجی برای مسیرهای عضویت.
- * دلیل استفاده: جلوگیری از ورود تاریخ‌های نامعتبر و رشته‌های نادرست.
+ * دلیل اصلاح: اضافه کردن چک منطقی برای تاریخ‌ها (پایان باید بعد از شروع باشد).
  */
 import { z } from "zod";
 
@@ -10,6 +10,9 @@ export const createMembershipSchema = z.object({
     sportId: z.string().uuid("شناسه رشته ورزشی معتبر نیست."),
     startsAt: z.string().datetime("تاریخ شروع معتبر نیست."),
     endsAt: z.string().datetime("تاریخ پایان معتبر نیست."),
+  }).refine((data) => new Date(data.endsAt) > new Date(data.startsAt), {
+    message: "تاریخ پایان باید بعد از تاریخ شروع باشد.",
+    path: ["endsAt"],
   }),
 });
 
@@ -19,4 +22,4 @@ export const updateMembershipSchema = z.object({
     endsAt: z.string().datetime().optional(),
     status: z.enum(["ACTIVE", "EXPIRED", "CANCELLED"]).optional(),
   }),
-});
+}); 
