@@ -85,7 +85,8 @@ model User {
   programs           Program[]
   programAssignments ProgramAssignment[]
   exerciseLogs       ExerciseLog[]
-  
+  conversationMembers ConversationMember[]
+  sentMessages        Message[]
   ownedGroups        Group[]
   groupMemberships   GroupMember[]
   files              File[]
@@ -450,10 +451,67 @@ model File {
   path         String   @db.VarChar(500)
   isPrivate    Boolean  @default(true) @map("is_private")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-
+  messages Message[]
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
   @@index([type])
   @@map("files")
+}
+// ==============================================
+// Chat (چت خصوصی و گروهی - فاز ۱۲)
+// ==============================================
+
+enum ConversationType {
+  PRIVATE
+  GROUP
+}
+
+model Conversation {
+  id        String           @id @default(uuid()) @db.Uuid
+  type      ConversationType @default(PRIVATE)
+  title     String?          @db.VarChar(150) // برای گروه‌ها
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id             String    @id @default(uuid()) @db.Uuid
+  conversationId String    @map("conversation_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  joinedAt       DateTime  @default(now()) @map("joined_at") @db.Timestamptz(3)
+  lastReadAt     DateTime? @map("last_read_at") @db.Timestamptz(3)
+  leftAt         DateTime? @map("left_at") @db.Timestamptz(3)  // ← این خط اضافه شد
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_members")
+}
+
+model Message {
+  id             String   @id @default(uuid()) @db.Uuid
+  conversationId String   @map("conversation_id") @db.Uuid
+  senderId       String   @map("sender_id") @db.Uuid
+  content        String?  @db.Text
+  fileId         String?  @map("file_id") @db.Uuid // برای پیام‌های فایل‌دار
+  replyToId      String?  @map("reply_to_id") @db.Uuid // پاسخ به پیام دیگر
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  file         File?        @relation(fields: [fileId], references: [id])
+  replyTo      Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies      Message[]    @relation("MessageReplies")
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@map("messages")
 }

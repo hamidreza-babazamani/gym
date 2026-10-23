@@ -1,11 +1,11 @@
-/**
- * فایل اصلی برای راه‌اندازی سرور.
- * دلیل استفاده از env: به جای خواندن مستقیم process.env، از کانفیگ معتبرسنجی‌شده استفاده می‌کنیم تا مطمئن شویم پورت درست است.
- */
+import http from "http";
 import app from "./app";
 import { env } from "./config/env";
+import { initSocket } from "./config/socket";
 
-// اجرای سرور با پورت خوانده‌شده از کانفیگ
-app.listen(env.PORT, () => {
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(env.PORT, () => {
   console.log(`Gym Backend is running on http://localhost:${env.PORT}`);
 });
