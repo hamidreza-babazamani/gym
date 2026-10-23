@@ -97,24 +97,57 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     include: { roles: true },
   });
 
-  // بررسی وجود کاربر و صحیح بودن رمز عبور
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-    // برای جلوگیری از افشای وجود حساب، پیام یکسان برمی‌گردانیم
+  // برای جلوگیری از افشای وجود حساب، پیام یکسان برمی‌گردانیم
+  if (!user) {
     throw new ApiError(401, "اطلاعات ورود صحیح نیست.");
   }
 
-  // جلوگیری از ورود حساب‌های غیرفعال
+  // بررسی قفل بودن حساب
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+    throw new ApiError(429, `حساب کاربری شما به دلیل تلاش‌های ناموفق قفل شده است. لطفاً ${remainingMinutes} دقیقه دیگر تلاش کنید.`);
+  }
+
+  // بررسی صحت رمز عبور
+  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+  if (!isPasswordValid) {
+    // افزایش شمارنده تلاش‌های ناموفق
+    const newFailedCount = user.failedLoginCount + 1;
+    const lockDuration = 15 * 60 * 1000; // ۱۵ دقیقه
+
+    const updateData: any = { failedLoginCount: newFailedCount };
+
+    // اگر تعداد تلاش‌ها به ۵ رسید، حساب را قفل کن
+    if (newFailedCount >= 5) {
+      updateData.lockedUntil = new Date(Date.now() + lockDuration);
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: updateData,
+    });
+
+    throw new ApiError(401, "اطلاعات ورود صحیح نیست.");
+  }
+
+  // بررسی وضعیت حساب
   if (user.status !== "ACTIVE") {
     throw new ApiError(403, "حساب کاربری غیرفعال یا تأیید نشده است.");
   }
 
+  // ریست کردن شمارنده تلاش‌های ناموفق بعد از ورود موفق
+  if (user.failedLoginCount > 0 || user.lockedUntil) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginCount: 0, lockedUntil: null },
+    });
+  }
+
   const roles = user.roles.map((item) => item.role);
-  
-  // ساخت توکن‌ها
   const accessToken = generateAccessToken(user.id, roles);
   const refreshToken = await createSession(user.id, req);
 
-  // آپدیت زمان آخرین ورود
   await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() },
