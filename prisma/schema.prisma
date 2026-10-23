@@ -85,6 +85,9 @@ model User {
   programs           Program[]
   programAssignments ProgramAssignment[]
   exerciseLogs       ExerciseLog[]
+  
+  ownedGroups        Group[]
+  groupMemberships   GroupMember[]
 
   @@index([status])
   @@index([deletedAt])
@@ -219,7 +222,6 @@ model Membership {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
 
-  // نکته: ایندکس یکتای شرطی (فقط برای ACTIVE) در migration دستی اضافه می‌شود
   @@index([userId, status])
   @@index([sportId, status])
   @@index([endsAt])
@@ -341,4 +343,44 @@ model ExerciseLog {
 
   @@index([studentId, performedAt])
   @@map("exercise_logs")
+}
+
+// ==============================================
+// Group (گروه - فاز ۱۰)
+// ==============================================
+
+model Group {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(150)
+  description String?  @db.Text
+  coachId     String   @map("coach_id") @db.Uuid
+  capacity    Int      @default(10)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  coach   User          @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  members GroupMember[]
+
+  @@index([coachId, isActive])
+  @@map("groups")
+}
+
+// ==============================================
+// GroupMember (اعضای گروه - فاز ۱۰)
+// ==============================================
+
+model GroupMember {
+  id       String    @id @default(uuid()) @db.Uuid
+  groupId  String    @map("group_id") @db.Uuid
+  userId   String    @map("user_id") @db.Uuid
+  joinedAt DateTime  @default(now()) @map("joined_at") @db.Timestamptz(3)
+  leftAt   DateTime? @map("left_at") @db.Timestamptz(3)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
 }

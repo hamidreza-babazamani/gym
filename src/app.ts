@@ -18,6 +18,7 @@ import coachStudentRoutes from "./routes/coach-student.routes";
 import sportRoutes from "./routes/sport.routes";
 import membershipRoutes from "./routes/membership.routes";
 import programRoutes from "./routes/program.routes";
+import groupRoutes from "./routes/group.routes";
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use("/api/v1", coachStudentRoutes);
 app.use("/api/v1/sports", sportRoutes);
 app.use("/api/v1/memberships", membershipRoutes);
 app.use("/api/v1/programs", programRoutes);
+app.use("/api/v1/groups", groupRoutes);
 
 // ۸. مدیریت مسیرهای نامعتبر
 app.use(notFoundMiddleware);
