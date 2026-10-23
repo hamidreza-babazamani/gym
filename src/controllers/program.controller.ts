@@ -335,3 +335,137 @@ export const logExercise = asyncHandler(async (req: AuthenticatedRequest, res: R
 
   return sendSuccess(res, "اجرای تمرین با موفقیت ثبت شد.", { log }, 201);
 });
+// ویرایش یک روز تمرینی
+export const updateProgramDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const { name, dayOfWeek } = req.body;
+  const coachId = req.user!.id;
+
+  const day = await prisma.programDay.findFirst({
+    where: { id, program: { coachId } },
+  });
+
+  if (!day) throw new ApiError(404, "روز تمرینی پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  const updated = await prisma.programDay.update({
+    where: { id },
+    data: {
+      ...(name ? { name } : {}),
+      ...(dayOfWeek !== undefined ? { dayOfWeek } : {}),
+    },
+  });
+
+  return sendSuccess(res, "روز تمرینی با موفقیت ویرایش شد.", { day: updated });
+});
+
+// حذف یک روز تمرینی (همراه با تمرین‌های داخلش)
+export const deleteProgramDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const coachId = req.user!.id;
+
+  const day = await prisma.programDay.findFirst({
+    where: { id, program: { coachId } },
+  });
+
+  if (!day) throw new ApiError(404, "روز تمرینی پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  await prisma.programDay.delete({ where: { id } });
+
+  return sendSuccess(res, "روز تمرینی و تمرین‌های آن با موفقیت حذف شد.");
+});
+// ویرایش یک برنامه
+export const updateProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const { name, description, isTemplate } = req.body;
+  const coachId = req.user!.id;
+
+  const program = await prisma.program.findFirst({ where: { id, coachId } });
+  if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  const updated = await prisma.program.update({
+    where: { id },
+    data: {
+      ...(name ? { name } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(isTemplate !== undefined ? { isTemplate } : {}),
+    },
+  });
+
+  return sendSuccess(res, "برنامه با موفقیت ویرایش شد.", { program: updated });
+});
+
+// حذف یک برنامه (همراه با تمام روزها و تمرین‌ها)
+export const deleteProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const coachId = req.user!.id;
+
+  const program = await prisma.program.findFirst({ where: { id, coachId } });
+  if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  await prisma.program.delete({ where: { id } });
+
+  return sendSuccess(res, "برنامه و تمام محتویات آن با موفقیت حذف شد.");
+});
+// دریافت لیست نسخه‌های یک برنامه
+export const listProgramVersions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const programId = String(req.params.programId);
+  const coachId = req.user!.id;
+
+  // بررسی مالکیت برنامه
+  const program = await prisma.program.findFirst({ where: { id: programId, coachId } });
+  if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  const versions = await prisma.programVersion.findMany({
+    where: { programId },
+    orderBy: { version: "desc" },
+  });
+
+  return sendSuccess(res, "لیست نسخه‌ها دریافت شد.", { versions });
+});
+
+// بازگردانی برنامه به یک نسخه قبلی
+export const revertProgramToVersion = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const programId = String(req.params.programId);
+  const versionId = String(req.params.versionId);
+  const coachId = req.user!.id;
+
+  const program = await prisma.program.findFirst({ where: { id: programId, coachId } });
+  if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  const version = await prisma.programVersion.findFirst({
+    where: { id: versionId, programId },
+  });
+
+  if (!version) throw new ApiError(404, "نسخه پیدا نشد.");
+
+  // گرفتن نسخه پشتیبان از وضعیت فعلی قبل از بازگردانی
+  await createProgramSnapshot(programId);
+
+  // حذف روزها و تمرین‌های فعلی
+  await prisma.programDay.deleteMany({ where: { programId } });
+
+  // بازسازی برنامه از snapshot
+  const snapshot = version.snapshot as any;
+  
+  for (const day of snapshot.days) {
+    const newDay = await prisma.programDay.create({
+      data: { programId, dayOfWeek: day.dayOfWeek, name: day.name },
+    });
+
+    for (const pe of day.exercises) {
+      await prisma.programExercise.create({
+        data: {
+          dayId: newDay.id,
+          exerciseId: pe.exerciseId,
+          sets: pe.sets,
+          reps: pe.reps,
+          weight: pe.weight,
+          restTime: pe.restTime,
+          order: pe.order,
+        },
+      });
+    }
+  }
+
+  return sendSuccess(res, "برنامه با موفقیت به نسخه قبلی بازگردانده شد.");
+});

@@ -62,3 +62,16 @@ export const logExerciseSchema = z.object({
     notes: z.string().max(500).optional(),
   }),
 });
+export const updateProgramDaySchema = z.object({
+  body: z.object({
+    name: z.string().min(2).max(100).optional(),
+    dayOfWeek: z.number().int().min(0).max(6).optional(),
+  }),
+});
+export const updateProgramSchema = z.object({
+  body: z.object({
+    name: z.string().min(2).max(150).optional(),
+    description: z.string().optional(),
+    isTemplate: z.boolean().optional(),
+  }),
+});

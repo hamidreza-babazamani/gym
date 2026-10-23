@@ -28,3 +28,14 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true, // درخواست‌های موفق را در شمارش حساب نکن
 });
+// محدودیت سخت‌گیرانه برای درخواست ارسال مجدد ایمیل تأیید
+export const resendVerificationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // ۱ ساعت
+  max: 3, // حداکثر ۳ درخواست در هر ساعت
+  message: {
+    success: false,
+    message: "تعداد درخواست‌های شما برای ارسال ایمیل بیش از حد مجاز است. لطفاً بعداً تلاش کنید.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

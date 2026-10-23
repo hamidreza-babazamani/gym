@@ -17,6 +17,8 @@ import {
   verifyEmailSchema, changeEmailSchema
 } from "../validations/auth.validation";
 import { z } from "zod";
+// در بخش import:
+import { resendVerificationLimiter } from "../config/rateLimit.config";
 
 const router = Router();
 
@@ -62,5 +64,8 @@ router.post("/verify-email", validate(verifyEmailSchema), verifyEmail);
 
 // ارسال مجدد لینک تأیید
 router.post("/resend-verification", validate(forgotPasswordSchema), resendVerificationEmail);
+
+// در بخش مسیرها:
+router.post("/resend-verification", resendVerificationLimiter, validate(forgotPasswordSchema), resendVerificationEmail);
 
 export default router;

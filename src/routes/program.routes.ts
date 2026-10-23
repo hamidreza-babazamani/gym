@@ -1,6 +1,6 @@
 /**
  * مسیرهای مربوط به برنامه‌های تمرینی.
- * دلیل آپدیت: اضافه شدن مسیرهای ویرایش/حذف تمرین و ثبت اجرای آن.
+ * دلیل آپدیت: اضافه شدن مسیرهای ویرایش/حذف برنامه، ویرایش/حذف روز و بازگردانی نسخه.
  */
 import { Router } from "express";
 import {
@@ -13,6 +13,12 @@ import {
   updateProgramExercise,
   deleteProgramExercise,
   logExercise,
+  listProgramVersions,
+  revertProgramToVersion,
+  updateProgramDay,
+  deleteProgramDay,
+  updateProgram,
+  deleteProgram,
 } from "../controllers/program.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import requireRole from "../middlewares/role.middleware";
@@ -25,6 +31,8 @@ import {
   assignProgramSchema,
   updateProgramExerciseSchema,
   logExerciseSchema,
+  updateProgramDaySchema,
+  updateProgramSchema,
 } from "../validations/program.validation";
 
 const router = Router();
@@ -50,6 +58,23 @@ router.post(
 // مشاهده جزئیات یک برنامه
 router.get("/:id", authMiddleware, getProgram);
 
+// ویرایش یک برنامه
+router.patch(
+  "/:id",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  validate(updateProgramSchema),
+  updateProgram
+);
+
+// حذف یک برنامه
+router.delete(
+  "/:id",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  deleteProgram
+);
+
 // اضافه کردن روز به برنامه
 router.post(
   "/:programId/days",
@@ -57,6 +82,23 @@ router.post(
   requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
   validate(addDaySchema),
   addDay
+);
+
+// ویرایش یک روز تمرینی
+router.patch(
+  "/days/:id",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  validate(updateProgramDaySchema),
+  updateProgramDay
+);
+
+// حذف یک روز تمرینی
+router.delete(
+  "/days/:id",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  deleteProgramDay
 );
 
 // اضافه کردن تمرین به روز
@@ -101,6 +143,22 @@ router.post(
   requireRole("STUDENT"),
   validate(logExerciseSchema),
   logExercise
+);
+
+// دریافت لیست نسخه‌های یک برنامه
+router.get(
+  "/:programId/versions",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  listProgramVersions
+);
+
+// بازگردانی برنامه به یک نسخه قبلی
+router.post(
+  "/:programId/versions/:versionId/revert",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  revertProgramToVersion
 );
 
 export default router;
