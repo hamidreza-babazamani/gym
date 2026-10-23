@@ -1,0 +1,45 @@
+/**
+ * قوانین اعتبارسنجی برای مسیرهای برنامه‌های تمرینی.
+ * دلیل استفاده: جلوگیری از ورود داده‌های نامعتبر برای تمرین، برنامه و اختصاص آن.
+ */
+import { z } from "zod";
+
+export const createExerciseSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, "نام تمرین باید حداقل ۲ کاراکتر باشد.").max(100),
+    description: z.string().optional(),
+    muscleGroup: z.string().max(100).optional(),
+  }),
+});
+
+export const createProgramSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, "نام برنامه باید حداقل ۲ کاراکتر باشد.").max(150),
+    description: z.string().optional(),
+    isTemplate: z.boolean().optional(),
+  }),
+});
+
+export const addDaySchema = z.object({
+  body: z.object({
+    dayOfWeek: z.number().int().min(0).max(6, "روز هفته باید بین ۰ تا ۶ باشد."),
+    name: z.string().min(2, "نام روز باید حداقل ۲ کاراکتر باشد.").max(100),
+  }),
+});
+
+export const addExerciseToDaySchema = z.object({
+  body: z.object({
+    exerciseId: z.string().uuid("شناسه تمرین معتبر نیست."),
+    sets: z.number().int().min(1).max(20).optional(),
+    reps: z.number().int().min(1).max(100).optional(),
+    weight: z.number().min(0).optional(),
+    restTime: z.number().int().min(0).optional(),
+    order: z.number().int().min(0).optional(),
+  }),
+});
+
+export const assignProgramSchema = z.object({
+  body: z.object({
+    studentId: z.string().uuid("شناسه ورزشکار معتبر نیست."),
+  }),
+});
