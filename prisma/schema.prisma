@@ -23,7 +23,7 @@ enum Role {
 }
 
 enum AccountStatus {
-  PENDING_VERIFICATION   // در انتظار تأیید ایمیل
+  PENDING_VERIFICATION
   ACTIVE
   SUSPENDED
   DELETED
@@ -35,6 +35,11 @@ enum CoachStudentStatus {
   REJECTED
   CANCELLED
   ENDED
+}
+
+enum CoachStudentInitiator {
+  COACH
+  STUDENT
 }
 
 // ==============================================
@@ -49,22 +54,18 @@ model User {
   passwordHash       String        @map("password_hash") @db.VarChar(255)
   status             AccountStatus @default(PENDING_VERIFICATION)
   
-  // تأییدها
   emailVerifiedAt    DateTime?     @map("email_verified_at") @db.Timestamptz(3)
   phoneVerifiedAt    DateTime?     @map("phone_verified_at") @db.Timestamptz(3)
   
-  // امنیت (فاز ۴ و ۵)
   lastLoginAt        DateTime?     @map("last_login_at") @db.Timestamptz(3)
   passwordChangedAt  DateTime?     @map("password_changed_at") @db.Timestamptz(3)
   failedLoginCount   Int           @default(0) @map("failed_login_count")
   lockedUntil        DateTime?     @map("locked_until") @db.Timestamptz(3)
   
-  // Timestamps
   createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt          DateTime?     @map("deleted_at") @db.Timestamptz(3)
   
-  // Relations
   roles              UserRole[]
   sessions           Session[]
   passwordResets     PasswordResetToken[]
@@ -139,27 +140,6 @@ model EmailVerificationToken {
 }
 
 // ==============================================
-// CoachStudent — بدون تغییر تا فاز ۷
-// ==============================================
-
-model CoachStudent {
-  id        String             @id @default(uuid()) @db.Uuid
-  coachId   String             @map("coach_id") @db.Uuid
-  studentId String             @map("student_id") @db.Uuid
-  status    CoachStudentStatus @default(PENDING)
-  startedAt DateTime?          @map("started_at") @db.Timestamptz(3)
-  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  
-  coach   User @relation("Coach", fields: [coachId], references: [id], onDelete: Cascade)
-  student User @relation("Student", fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@unique([coachId, studentId])
-  @@index([coachId, status])
-  @@index([studentId, status])
-  @@map("coach_students")
-}
-// ==============================================
 // Sport (رشته ورزشی - فاز ۶)
 // ==============================================
 
@@ -173,6 +153,38 @@ model Sport {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  coachStudents CoachStudent[]
+
   @@index([isActive, sortOrder])
   @@map("sports")
+}
+
+// ==============================================
+// CoachStudent (فاز ۷)
+// ==============================================
+
+model CoachStudent {
+  id              String                @id @default(uuid()) @db.Uuid
+  coachId         String                @map("coach_id") @db.Uuid
+  studentId       String                @map("student_id") @db.Uuid
+  sportId         String                @map("sport_id") @db.Uuid
+  status          CoachStudentStatus    @default(PENDING)
+  initiatedBy     CoachStudentInitiator @map("initiated_by")
+  
+  startedAt       DateTime?             @map("started_at") @db.Timestamptz(3)
+  endedAt         DateTime?             @map("ended_at") @db.Timestamptz(3)
+  endedReason     String?               @map("ended_reason") @db.VarChar(500)
+  
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  
+  coach           User                  @relation("Coach", fields: [coachId], references: [id], onDelete: Cascade)
+  student         User                  @relation("Student", fields: [studentId], references: [id], onDelete: Cascade)
+  sport           Sport                 @relation(fields: [sportId], references: [id])
+
+  @@unique([coachId, studentId, sportId])
+  @@index([coachId, status])
+  @@index([studentId, status])
+  @@index([sportId, status])
+  @@map("coach_students")
 }

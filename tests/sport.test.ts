@@ -1,12 +1,11 @@
 /**
  * تست‌های مربوط به مدیریت رشته‌های ورزشی.
- * دلیل استفاده: بررسی دسترسی‌ها (فقط ادمین) و عملکرد صحیح CRUD.
+ * دلیل اصلاح: استفاده از نام یکتا (با Date.now) برای جلوگیری از خطای تکراری بودن در اجراهای متوالی تست.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
-import { hashToken } from "../src/utils/token.utils";
 
 describe("Sport Management", () => {
   let adminToken: string;
@@ -49,13 +48,14 @@ describe("Sport Management", () => {
   });
 
   it("باید به ادمین اجازه ایجاد رشته بدهد (خطای 201)", async () => {
+    const uniqueSportName = `بدنسازی تست ${Date.now()}`;
     const res = await request(app)
       .post("/api/v1/sports")
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ name: "بدنسازی تست", description: "توضیحات تست" });
+      .send({ name: uniqueSportName, description: "توضیحات تست" });
 
     expect(res.status).toBe(201);
-    expect(res.body.data.sport.name).toBe("بدنسازی تست");
+    expect(res.body.data.sport.name).toBe(uniqueSportName);
   });
 
   it("باید لیست رشته‌ها را برای کاربران لاگین‌شده برگرداند", async () => {

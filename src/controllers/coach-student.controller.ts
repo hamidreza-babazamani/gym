@@ -1,196 +1,204 @@
-
-import { Response, NextFunction } from "express";
-import { Prisma } from "../../generated/prisma/client";
+/**
+ * کنترلرهای مدیریت ارتباط مربی و شاگرد.
+ * دلیل بازنویسی: اضافه شدن پشتیبانی از رشته ورزشی (sportId)، لغو درخواست و پایان ارتباط.
+ */
+import { Response } from "express";
 import prisma from "../lib/prisma";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
-import { sendError, sendSuccess } from "../utils/api-response";
+import { sendSuccess } from "../utils/api-response";
+import { ApiError } from "../utils/ApiError";
+import { asyncHandler } from "../utils/asyncHandler";
 
 // ارسال درخواست شاگرد برای پیوستن به مربی
-export const requestCoach = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const rawCoachId = req.params.coachId;
-    const coachId = Array.isArray(rawCoachId)
-      ? rawCoachId[0]
-      : rawCoachId;
+export const requestCoach = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const coachId = String(req.params.coachId);
+  const studentId = req.user?.id;
+  const { sportId } = req.body;
 
-    const studentId = req.user?.id;
-
-    if (!studentId) {
-      return sendError(res, "ابتدا وارد حساب کاربری شوید.", 401);
-    }
-
-    if (!coachId || coachId === studentId) {
-      return sendError(res, "شناسه مربی معتبر نیست.", 400);
-    }
-
-    // بررسی اینکه کاربر هدف واقعاً مربی فعال باشد
-    const coach = await prisma.user.findFirst({
-      where: {
-        id: coachId,
-        status: "ACTIVE",
-        roles: {
-          some: { role: "COACH" },
-        },
-      },
-      select: { id: true },
-    });
-
-    if (!coach) {
-      return sendError(res, "مربی موردنظر پیدا نشد.", 404);
-    }
-
-    // ایجاد ارتباط در وضعیت انتظار برای تأیید مربی
-    const request = await prisma.coachStudent.create({
-      data: {
-        coachId,
-        studentId,
-        status: "PENDING",
-      },
-    });
-
-    return sendSuccess(
-      res,
-      "درخواست شما برای مربی ارسال شد.",
-      {
-        requestId: request.id,
-        coachId: request.coachId,
-        status: request.status,
-      },
-      201
-    );
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return sendError(
-        res,
-        "برای این مربی قبلاً درخواست ثبت کرده‌اید.",
-        409
-      );
-    }
-
-    return next(error);
+  if (!studentId) {
+    throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
   }
-};
 
-/**
- * تأیید یا رد درخواست شاگرد توسط همان مربی
- */
-export const respondToCoachRequest = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const rawRequestId = req.params.requestId;
-    const requestId = Array.isArray(rawRequestId)
-      ? rawRequestId[0]
-      : rawRequestId;
-
-    const coachId = req.user?.id;
-    const { decision } = req.body ?? {};
-
-    if (!requestId || !coachId) {
-      return sendError(res, "اطلاعات درخواست معتبر نیست.", 400);
-    }
-
-    if (decision !== "APPROVE" && decision !== "REJECT") {
-      return sendError(
-        res,
-        "تصمیم باید APPROVE یا REJECT باشد.",
-        400
-      );
-    }
-
-    // فقط مربی صاحب درخواست می‌تواند آن را بررسی کند
-    const request = await prisma.coachStudent.findFirst({
-      where: {
-        id: requestId,
-        coachId,
-        status: "PENDING",
-      },
-      select: { id: true },
-    });
-
-    if (!request) {
-      return sendError(
-        res,
-        "درخواست پیدا نشد یا قبلاً بررسی شده است.",
-        404
-      );
-    }
-
-    const updatedRequest = await prisma.coachStudent.update({
-      where: { id: request.id },
-      data: {
-        status: decision === "APPROVE" ? "ACTIVE" : "REJECTED",
-        ...(decision === "APPROVE" ? { startedAt: new Date() } : {}),
-      },
-    });
-
-    return sendSuccess(
-      res,
-      decision === "APPROVE"
-        ? "درخواست شاگرد تأیید شد."
-        : "درخواست شاگرد رد شد.",
-      {
-        requestId: updatedRequest.id,
-        status: updatedRequest.status,
-      }
-    );
-  } catch (error) {
-    return next(error);
+  if (coachId === studentId) {
+    throw new ApiError(400, "شناسه مربی معتبر نیست.");
   }
-};
 
-/**
- * دریافت فهرست مربیان فعال برای شاگردها
- */
-export const listCoaches = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    // بررسی ورود کاربر به حساب
-    if (!req.user?.id) {
-      return sendError(res, "ابتدا وارد حساب کاربری شوید.", 401);
-    }
+  // بررسی اینکه کاربر هدف واقعاً مربی فعال باشد
+  const coach = await prisma.user.findFirst({
+    where: {
+      id: coachId,
+      status: "ACTIVE",
+      roles: { some: { role: "COACH" } },
+    },
+    select: { id: true },
+  });
 
-    // دریافت مربیانی که حساب فعال و نقش مربی دارند
-    const coaches = await prisma.user.findMany({
-      where: {
-        status: "ACTIVE",
-        roles: {
-          some: { role: "COACH" },
-        },
-      },
-      // فقط اطلاعات عمومی و ضروری مربی برگردانده می‌شود
-      select: {
-        id: true,
-        fullName: true,
-      },
-      // مرتب‌سازی نام مربیان به ترتیب حروف الفبا
-      orderBy: {
-        fullName: "asc",
-      },
-    });
-
-    // ارسال فهرست مربیان به همراه تعداد آن‌ها
-    return sendSuccess(
-      res,
-      "فهرست مربیان فعال دریافت شد.",
-      {
-        coaches,
-        count: coaches.length,
-      }
-    );
-  } catch (error) {
-    return next(error);
+  if (!coach) {
+    throw new ApiError(404, "مربی موردنظر پیدا نشد.");
   }
-};
+
+  // بررسی اینکه رشته ورزشی وجود دارد
+  const sport = await prisma.sport.findUnique({
+    where: { id: sportId },
+    select: { id: true, isActive: true },
+  });
+
+  if (!sport || !sport.isActive) {
+    throw new ApiError(400, "رشته ورزشی نامعتبر یا غیرفعال است.");
+  }
+
+  // بررسی اینکه آیا قبلاً درخواستی برای این مربی و این رشته ثبت شده است
+  const existing = await prisma.coachStudent.findFirst({
+    where: {
+      coachId,
+      studentId,
+      sportId,
+      status: { in: ["PENDING", "ACTIVE"] },
+    },
+  });
+
+  if (existing) {
+    throw new ApiError(409, "شما قبلاً برای این مربی و رشته درخواست داده‌اید یا ارتباط فعال دارید.");
+  }
+
+  // ایجاد ارتباط در وضعیت انتظار
+  const request = await prisma.coachStudent.create({
+    data: {
+      coachId,
+      studentId,
+      sportId,
+      initiatedBy: "STUDENT",
+      status: "PENDING",
+    },
+  });
+
+  return sendSuccess(res, "درخواست شما برای مربی ارسال شد.", {
+    requestId: request.id,
+    status: request.status,
+  }, 201);
+});
+
+// تأیید یا رد درخواست شاگرد توسط مربی
+export const respondToCoachRequest = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const requestId = String(req.params.requestId);
+  const coachId = req.user?.id;
+  const { decision } = req.body;
+
+  if (!coachId) {
+    throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
+  }
+
+  // فقط مربی صاحب درخواست می‌تواند آن را بررسی کند
+  const request = await prisma.coachStudent.findFirst({
+    where: {
+      id: requestId,
+      coachId,
+      status: "PENDING",
+    },
+    select: { id: true },
+  });
+
+  if (!request) {
+    throw new ApiError(404, "درخواست پیدا نشد یا قبلاً بررسی شده است.");
+  }
+
+  const updatedRequest = await prisma.coachStudent.update({
+    where: { id: request.id },
+    data: {
+      status: decision === "APPROVE" ? "ACTIVE" : "REJECTED",
+      ...(decision === "APPROVE" ? { startedAt: new Date() } : {}),
+    },
+  });
+
+  return sendSuccess(
+    res,
+    decision === "APPROVE" ? "درخواست شاگرد تأیید شد." : "درخواست شاگرد رد شد.",
+    { requestId: updatedRequest.id, status: updatedRequest.status }
+  );
+});
+
+// لغو درخواست توسط شاگرد (قبل از تأیید)
+export const cancelCoachRequest = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const requestId = String(req.params.requestId);
+  const studentId = req.user?.id;
+
+  if (!studentId) {
+    throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
+  }
+
+  const request = await prisma.coachStudent.findFirst({
+    where: {
+      id: requestId,
+      studentId,
+      status: "PENDING",
+    },
+    select: { id: true },
+  });
+
+  if (!request) {
+    throw new ApiError(404, "درخواست پیدا نشد یا قابل لغو نیست.");
+  }
+
+  await prisma.coachStudent.update({
+    where: { id: request.id },
+    data: { status: "CANCELLED" },
+  });
+
+  return sendSuccess(res, "درخواست شما لغو شد.");
+});
+
+// پایان دادن به ارتباط فعال (توسط مربی یا شاگرد)
+export const endCoachStudent = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const relationId = String(req.params.id);
+  const userId = req.user?.id;
+  const { reason } = req.body;
+
+  if (!userId) {
+    throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
+  }
+
+  const relation = await prisma.coachStudent.findFirst({
+    where: {
+      id: relationId,
+      status: "ACTIVE",
+      OR: [{ coachId: userId }, { studentId: userId }],
+    },
+    select: { id: true },
+  });
+
+  if (!relation) {
+    throw new ApiError(404, "ارتباط پیدا نشد یا قابل پایان نیست.");
+  }
+
+  await prisma.coachStudent.update({
+    where: { id: relation.id },
+    data: {
+      status: "ENDED",
+      endedAt: new Date(),
+      endedReason: reason || null,
+    },
+  });
+
+  return sendSuccess(res, "ارتباط با موفقیت پایان یافت.");
+});
+
+// دریافت فهرست مربیان فعال برای شاگردها
+export const listCoaches = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  if (!req.user?.id) {
+    throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
+  }
+
+  const coaches = await prisma.user.findMany({
+    where: {
+      status: "ACTIVE",
+      roles: { some: { role: "COACH" } },
+    },
+    select: { id: true, fullName: true },
+    orderBy: { fullName: "asc" },
+  });
+
+  return sendSuccess(res, "فهرست مربیان فعال دریافت شد.", {
+    coaches,
+    count: coaches.length,
+  });
+});
