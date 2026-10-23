@@ -470,3 +470,61 @@ export const resendVerificationEmail = asyncHandler(async (req: Request, res: Re
 
   return sendSuccess(res, "اگر این ایمیل در سیستم باشد، لینک تأیید ارسال خواهد شد.");
 });
+// تغییر ایمیل (نیاز به تأیید مجدد)
+export const changeEmail = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  const { newEmail, password } = req.body;
+
+  if (!userId) throw new ApiError(401, "احراز هویت انجام نشده است.");
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new ApiError(404, "کاربر پیدا نشد.");
+
+  // بررسی صحت رمز عبور برای امنیت بیشتر
+  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+  if (!isPasswordValid) {
+    throw new ApiError(400, "رمز عبور صحیح نیست.");
+  }
+
+  // بررسی تکراری نبودن ایمیل جدید
+  const existing = await prisma.user.findUnique({ where: { email: newEmail } });
+  if (existing) {
+    throw new ApiError(409, "این ایمیل قبلاً ثبت شده است.");
+  }
+
+  // تولید توکن تأیید جدید
+  const verificationToken = generateRefreshToken();
+  const hashedToken = hashToken(verificationToken);
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+  await prisma.$transaction(async (tx) => {
+    // حذف توکن‌های قبلی
+    await tx.emailVerificationToken.deleteMany({ where: { userId } });
+
+    // آپدیت ایمیل و تغییر وضعیت به PENDING_VERIFICATION
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        email: newEmail,
+        emailVerifiedAt: null,
+        status: "PENDING_VERIFICATION",
+      },
+    });
+
+    // ساخت توکن جدید
+    await tx.emailVerificationToken.create({
+      data: {
+        userId: user.id,
+        email: newEmail,
+        tokenHash: hashedToken,
+        expiresAt,
+      },
+    });
+  });
+
+  if (env.NODE_ENV === "development") {
+    console.log(`[DEV ONLY] Email verification token for ${newEmail}: ${verificationToken}`);
+  }
+
+  return sendSuccess(res, "ایمیل شما تغییر کرد. لطفاً ایمیل جدید خود را تأیید کنید.");
+});

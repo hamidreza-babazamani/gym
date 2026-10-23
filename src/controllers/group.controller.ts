@@ -224,3 +224,51 @@ export const deleteGroup = asyncHandler(async (req: AuthenticatedRequest, res: R
 
   return sendSuccess(res, "گروه با موفقیت غیرفعال شد.");
 });
+// تنظیم تغییرات اختصاصی برای یک عضو
+export const setMemberOverride = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const groupId = String(req.params.id);
+  const userId = String(req.params.userId);
+  const { overrides } = req.body;
+  const coachId = req.user!.id;
+
+  // بررسی مالکیت گروه
+  const group = await prisma.group.findFirst({ where: { id: groupId, coachId } });
+  if (!group) throw new ApiError(404, "گروه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  // بررسی اینکه کاربر عضو گروه است
+  const member = await prisma.groupMember.findUnique({
+    where: { groupId_userId: { groupId, userId } },
+  });
+
+  if (!member || member.leftAt) {
+    throw new ApiError(404, "این کاربر عضو فعال گروه نیست.");
+  }
+
+  const override = await prisma.groupMemberOverride.upsert({
+    where: { groupId_userId: { groupId, userId } },
+    update: { overrides },
+    create: { groupId, userId, overrides },
+  });
+
+  return sendSuccess(res, "تغییرات اختصاصی با موفقیت ثبت شد.", { override });
+});
+
+// دریافت تغییرات اختصاصی یک عضو
+export const getMemberOverride = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const groupId = String(req.params.id);
+  const userId = String(req.params.userId);
+  const coachId = req.user!.id;
+
+  const group = await prisma.group.findFirst({ where: { id: groupId, coachId } });
+  if (!group) throw new ApiError(404, "گروه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  const override = await prisma.groupMemberOverride.findUnique({
+    where: { groupId_userId: { groupId, userId } },
+  });
+
+  if (!override) {
+    return sendSuccess(res, "تغییرات اختصاصی برای این عضو ثبت نشده است.", { override: null });
+  }
+
+  return sendSuccess(res, "تغییرات اختصاصی دریافت شد.", { override });
+});

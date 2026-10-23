@@ -48,3 +48,9 @@ export const verifyEmailSchema = z.object({
     token: z.string().min(1, "توکن الزامی است."),
   }),
 });
+export const changeEmailSchema = z.object({
+  body: z.object({
+    newEmail: z.string().email("فرمت ایمیل معتبر نیست."),
+    password: z.string().min(1, "رمز عبور برای تأیید تغییر ایمیل الزامی است."),
+  }),
+});

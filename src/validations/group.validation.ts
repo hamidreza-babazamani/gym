@@ -31,3 +31,8 @@ export const assignProgramToGroupSchema = z.object({
     programId: z.string().uuid("شناسه برنامه معتبر نیست."),
   }),
 });
+export const setMemberOverrideSchema = z.object({
+  body: z.object({
+    overrides: z.record(z.string(), z.any()), // یک آبجکت JSON آزاد برای تغییرات
+  }),
+});

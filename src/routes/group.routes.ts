@@ -11,6 +11,8 @@ import {
   removeMember,
   assignProgramToGroup,
   deleteGroup,
+  setMemberOverride,
+  getMemberOverride,
 } from "../controllers/group.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import requireRole from "../middlewares/role.middleware";
@@ -20,6 +22,7 @@ import {
   updateGroupSchema,
   addMemberSchema,
   assignProgramToGroupSchema,
+  setMemberOverrideSchema,
 } from "../validations/group.validation";
 
 const router = Router();
@@ -32,5 +35,9 @@ router.delete("/:id", authMiddleware, requireRole("COACH", "ADMIN", "SUPER_ADMIN
 router.post("/:id/members", authMiddleware, requireRole("COACH", "ADMIN", "SUPER_ADMIN"), validate(addMemberSchema), addMember);
 router.delete("/:id/members/:userId", authMiddleware, requireRole("COACH", "ADMIN", "SUPER_ADMIN"), removeMember);
 router.post("/:id/assign-program", authMiddleware, requireRole("COACH", "ADMIN", "SUPER_ADMIN"), validate(assignProgramToGroupSchema), assignProgramToGroup);
+
+// مسیرهای تغییرات اختصاصی
+router.post("/:id/members/:userId/override", authMiddleware, requireRole("COACH", "ADMIN", "SUPER_ADMIN"), validate(setMemberOverrideSchema), setMemberOverride);
+router.get("/:id/members/:userId/override", authMiddleware, requireRole("COACH", "ADMIN", "SUPER_ADMIN"), getMemberOverride);
 
 export default router;
