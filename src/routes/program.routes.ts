@@ -1,6 +1,6 @@
 /**
  * مسیرهای مربوط به برنامه‌های تمرینی.
- * دلیل آپدیت: اضافه شدن مسیرهای ویرایش/حذف برنامه، ویرایش/حذف روز و بازگردانی نسخه.
+ * دلیل آپدیت: اضافه شدن مسیر اختصاص دسته‌ای برنامه به چند ورزشکار.
  */
 import { Router } from "express";
 import {
@@ -19,6 +19,7 @@ import {
   deleteProgramDay,
   updateProgram,
   deleteProgram,
+  assignProgramBulk,
 } from "../controllers/program.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import requireRole from "../middlewares/role.middleware";
@@ -33,6 +34,7 @@ import {
   logExerciseSchema,
   updateProgramDaySchema,
   updateProgramSchema,
+  assignProgramBulkSchema,
 } from "../validations/program.validation";
 
 const router = Router();
@@ -134,6 +136,15 @@ router.post(
   requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
   validate(assignProgramSchema),
   assignProgram
+);
+
+// اختصاص دسته‌ای برنامه به چند ورزشکار
+router.post(
+  "/:programId/assign-bulk",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  validate(assignProgramBulkSchema),
+  assignProgramBulk
 );
 
 // ثبت اجرای واقعی تمرین (توسط ورزشکار)

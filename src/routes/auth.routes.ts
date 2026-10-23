@@ -19,6 +19,16 @@ import {
 import { z } from "zod";
 // در بخش import:
 import { resendVerificationLimiter } from "../config/rateLimit.config";
+// در بخش import:
+import {
+  // ... بقیه importها
+  requestPhoneVerification,
+  verifyPhone,
+} from "../controllers/auth.controller";
+import {
+  // ... بقیه importها
+  verifyPhoneSchema,
+} from "../validations/auth.validation";
 
 const router = Router();
 
@@ -67,5 +77,9 @@ router.post("/resend-verification", validate(forgotPasswordSchema), resendVerifi
 
 // در بخش مسیرها:
 router.post("/resend-verification", resendVerificationLimiter, validate(forgotPasswordSchema), resendVerificationEmail);
+
+// در بخش مسیرها (به انتهای مسیرها اضافه کن):
+router.post("/request-phone-verification", authMiddleware, requestPhoneVerification);
+router.post("/verify-phone", validate(verifyPhoneSchema), verifyPhone);
 
 export default router;

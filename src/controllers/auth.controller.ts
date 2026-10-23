@@ -528,3 +528,67 @@ export const changeEmail = asyncHandler(async (req: AuthenticatedRequest, res: R
 
   return sendSuccess(res, "ایمیل شما تغییر کرد. لطفاً ایمیل جدید خود را تأیید کنید.");
 });
+// درخواست تأیید شماره موبایل (تولید توکن)
+export const requestPhoneVerification = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user?.id;
+  const { phone } = req.body;
+
+  if (!userId) throw new ApiError(401, "احراز هویت انجام نشده است.");
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new ApiError(404, "کاربر پیدا نشد.");
+
+  if (phone) {
+    const existing = await prisma.user.findUnique({ where: { phone } });
+    if (existing && existing.id !== userId) {
+      throw new ApiError(409, "این شماره موبایل قبلاً ثبت شده است.");
+    }
+  }
+
+  const verificationToken = generateRefreshToken();
+  const hashedToken = hashToken(verificationToken);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId: user.id,
+      email: phone || user.phone || "unknown",
+      tokenHash: hashedToken,
+      expiresAt,
+    },
+  });
+
+  if (env.NODE_ENV === "development") {
+    console.log(`[DEV ONLY] Phone verification token for ${phone || user.phone}: ${verificationToken}`);
+  }
+
+  return sendSuccess(res, "کد تأیید به شماره موبایل شما ارسال شد.");
+});
+
+// تأیید شماره موبایل
+export const verifyPhone = asyncHandler(async (req: Request, res: Response) => {
+  const { token } = req.body;
+  const hashedToken = hashToken(token);
+
+  const record = await prisma.emailVerificationToken.findUnique({
+    where: { tokenHash: hashedToken },
+  });
+
+  if (!record || record.expiresAt < new Date() || record.usedAt) {
+    throw new ApiError(400, "توکن تأیید نامعتبر یا منقضی شده است.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.emailVerificationToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    });
+
+    await tx.user.update({
+      where: { id: record.userId },
+      data: { phoneVerifiedAt: new Date() },
+    });
+  });
+
+  return sendSuccess(res, "شماره موبایل با موفقیت تأیید شد.");
+});

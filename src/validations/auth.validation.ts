@@ -54,3 +54,8 @@ export const changeEmailSchema = z.object({
     password: z.string().min(1, "رمز عبور برای تأیید تغییر ایمیل الزامی است."),
   }),
 });
+export const verifyPhoneSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, "توکن الزامی است."),
+  }),
+});

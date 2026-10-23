@@ -469,3 +469,48 @@ export const revertProgramToVersion = asyncHandler(async (req: AuthenticatedRequ
 
   return sendSuccess(res, "برنامه با موفقیت به نسخه قبلی بازگردانده شد.");
 });
+// اختصاص برنامه به چند ورزشکار به صورت هم‌زمان
+export const assignProgramBulk = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const programId = String(req.params.programId);
+  const { studentIds } = req.body;
+  const coachId = req.user!.id;
+
+  const program = await prisma.program.findFirst({ where: { id: programId, coachId } });
+  if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  const results = { success: 0, failed: 0, errors: [] as string[] };
+
+  for (const studentId of studentIds) {
+    try {
+      // بررسی ارتباط فعال
+      const relation = await prisma.coachStudent.findFirst({
+        where: { coachId, studentId, status: "ACTIVE" },
+      });
+
+      if (!relation) {
+        results.failed++;
+        results.errors.push(`شاگرد ${studentId}: ارتباط فعال وجود ندارد.`);
+        continue;
+      }
+
+      // بررسی تکراری بودن
+      const existing = await prisma.programAssignment.findFirst({
+        where: { programId, studentId },
+      });
+
+      if (existing) {
+        results.failed++;
+        results.errors.push(`شاگرد ${studentId}: قبلاً اختصاص یافته.`);
+        continue;
+      }
+
+      await prisma.programAssignment.create({ data: { programId, studentId } });
+      results.success++;
+    } catch (error) {
+      results.failed++;
+      results.errors.push(`شاگرد ${studentId}: خطای داخلی.`);
+    }
+  }
+
+  return sendSuccess(res, "عملیات اختصاص دسته‌ای انجام شد.", { results }, 201);
+});

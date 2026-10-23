@@ -75,3 +75,8 @@ export const updateProgramSchema = z.object({
     isTemplate: z.boolean().optional(),
   }),
 });
+export const assignProgramBulkSchema = z.object({
+  body: z.object({
+    studentIds: z.array(z.string().uuid("شناسه ورزشکار معتبر نیست.")).min(1, "حداقل یک ورزشکار باید انتخاب شود."),
+  }),
+});
