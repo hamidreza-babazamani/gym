@@ -1,16 +1,19 @@
 /**
  * مسیرهای مربوط به احراز هویت.
+ * دلیل آپدیت: اضافه شدن مسیرهای تأیید ایمیل و ارسال مجدد لینک تأیید.
  */
 import { Router } from "express";
 import { 
   login, register, getMe, refresh, logout, changePassword, 
-  forgotPassword, resetPassword, updateProfile 
+  forgotPassword, resetPassword, updateProfile,
+  verifyEmail, resendVerificationEmail
 } from "../controllers/auth.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import { validate } from "../middlewares/validate.middleware";
 import { 
   registerSchema, loginSchema, changePasswordSchema, 
-  forgotPasswordSchema, resetPasswordSchema, updateProfileSchema 
+  forgotPasswordSchema, resetPasswordSchema, updateProfileSchema,
+  verifyEmailSchema
 } from "../validations/auth.validation";
 import { z } from "zod";
 
@@ -49,5 +52,11 @@ router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 
 // تنظیم رمز عبور جدید
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
+
+// تأیید ایمیل
+router.post("/verify-email", validate(verifyEmailSchema), verifyEmail);
+
+// ارسال مجدد لینک تأیید
+router.post("/resend-verification", validate(forgotPasswordSchema), resendVerificationEmail);
 
 export default router;

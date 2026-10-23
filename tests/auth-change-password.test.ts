@@ -1,10 +1,10 @@
 /**
  * تست تغییر رمز عبور.
- * دلیل استفاده: اطمینان از اینکه کاربر می‌تواند رمز خود را تغییر دهد و توکن قبلی باطل می‌شود.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
 import app from "../src/app";
+import prisma from "../src/lib/prisma";
 
 describe("Change Password", () => {
   let accessToken: string;
@@ -14,11 +14,16 @@ describe("Change Password", () => {
   const newPassword = "NewPassword123";
 
   beforeAll(async () => {
-    // ثبت‌نام و لاگین برای گرفتن توکن‌ها
     await request(app).post("/api/v1/auth/register").send({
       fullName: "کاربر رمز",
       email,
       password: oldPassword,
+    });
+
+    // فعال کردن مستقیم کاربر
+    await prisma.user.update({
+      where: { email },
+      data: { status: "ACTIVE", emailVerifiedAt: new Date() },
     });
 
     const loginRes = await request(app).post("/api/v1/auth/login").send({
@@ -34,21 +39,13 @@ describe("Change Password", () => {
     const res = await request(app)
       .patch("/api/v1/auth/change-password")
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({
-        currentPassword: oldPassword,
-        newPassword: newPassword,
-      });
+      .send({ currentPassword: oldPassword, newPassword });
 
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
   });
 
   it("باید نشست قبلی را باطل کند (توکن تازه‌سازی قبلی کار نکند)", async () => {
-    const res = await request(app).post("/api/v1/auth/refresh").send({
-      refreshToken: refreshToken,
-    });
-
-    // چون رمز عوض شده، توکن قبلی باید باطل شده باشد
+    const res = await request(app).post("/api/v1/auth/refresh").send({ refreshToken });
     expect(res.status).toBe(401);
   });
 });

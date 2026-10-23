@@ -43,3 +43,8 @@ export const updateProfileSchema = z.object({
     phone: z.string().regex(/^\+?[\d\s()-]{7,20}$/, "فرمت شماره موبایل معتبر نیست.").optional(),
   }),
 });
+export const verifyEmailSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, "توکن الزامی است."),
+  }),
+});
