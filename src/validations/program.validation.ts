@@ -43,3 +43,22 @@ export const assignProgramSchema = z.object({
     studentId: z.string().uuid("شناسه ورزشکار معتبر نیست."),
   }),
 });
+export const updateProgramExerciseSchema = z.object({
+  body: z.object({
+    sets: z.number().int().min(1).max(20).optional(),
+    reps: z.number().int().min(1).max(100).optional(),
+    weight: z.number().min(0).optional(),
+    restTime: z.number().int().min(0).optional(),
+    order: z.number().int().min(0).optional(),
+  }),
+});
+
+export const logExerciseSchema = z.object({
+  body: z.object({
+    programExerciseId: z.string().uuid("شناسه تمرین معتبر نیست."),
+    actualSets: z.number().int().min(1),
+    actualReps: z.number().int().min(1),
+    actualWeight: z.number().min(0).optional(),
+    notes: z.string().max(500).optional(),
+  }),
+});

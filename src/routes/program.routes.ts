@@ -1,6 +1,6 @@
 /**
  * مسیرهای مربوط به برنامه‌های تمرینی.
- * دلیل استفاده: تعریف Endpointها و اعمال سطح دسترسی (فقط مربی و ادمین).
+ * دلیل آپدیت: اضافه شدن مسیرهای ویرایش/حذف تمرین و ثبت اجرای آن.
  */
 import { Router } from "express";
 import {
@@ -10,6 +10,9 @@ import {
   addExerciseToDay,
   getProgram,
   assignProgram,
+  updateProgramExercise,
+  deleteProgramExercise,
+  logExercise,
 } from "../controllers/program.controller";
 import authMiddleware from "../middlewares/auth.middleware";
 import requireRole from "../middlewares/role.middleware";
@@ -20,6 +23,8 @@ import {
   addDaySchema,
   addExerciseToDaySchema,
   assignProgramSchema,
+  updateProgramExerciseSchema,
+  logExerciseSchema,
 } from "../validations/program.validation";
 
 const router = Router();
@@ -63,6 +68,23 @@ router.post(
   addExerciseToDay
 );
 
+// ویرایش تمرین در برنامه
+router.patch(
+  "/exercises/:id",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  validate(updateProgramExerciseSchema),
+  updateProgramExercise
+);
+
+// حذف تمرین از برنامه
+router.delete(
+  "/exercises/:id",
+  authMiddleware,
+  requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
+  deleteProgramExercise
+);
+
 // اختصاص برنامه به ورزشکار
 router.post(
   "/:programId/assign",
@@ -70,6 +92,15 @@ router.post(
   requireRole("COACH", "ADMIN", "SUPER_ADMIN"),
   validate(assignProgramSchema),
   assignProgram
+);
+
+// ثبت اجرای واقعی تمرین (توسط ورزشکار)
+router.post(
+  "/log",
+  authMiddleware,
+  requireRole("STUDENT"),
+  validate(logExerciseSchema),
+  logExercise
 );
 
 export default router;

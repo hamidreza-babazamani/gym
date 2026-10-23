@@ -261,6 +261,7 @@ model Program {
   coach           User              @relation(fields: [coachId], references: [id], onDelete: Cascade)
   days            ProgramDay[]
   assignments     ProgramAssignment[]
+  versions        ProgramVersion[]
 
   @@index([coachId])
   @@map("programs")
@@ -321,7 +322,6 @@ model ProgramAssignment {
   student User?   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   group   Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  // یک برنامه می‌تواند به یک شخص یا یک گروه اختصاص یابد (نه هر دو با هم)
   @@unique([programId, studentId])
   @@unique([programId, groupId])
   @@index([studentId, isActive])
@@ -389,4 +389,21 @@ model GroupMember {
   @@unique([groupId, userId])
   @@index([userId])
   @@map("group_members")
+}
+
+// ==============================================
+// ProgramVersion (نسخه‌بندی برنامه - فاز ۹)
+// ==============================================
+
+model ProgramVersion {
+  id        String   @id @default(uuid()) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+  version   Int
+  snapshot  Json     // کل ساختار برنامه در این لحظه
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, version])
+  @@map("program_versions")
 }

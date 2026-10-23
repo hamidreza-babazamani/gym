@@ -1,6 +1,6 @@
 /**
  * تست‌های مربوط به مدیریت عضویت‌ها.
- * دلیل استفاده: بررسی دسترسی‌ها (فقط ادمین) و عملکرد صحیح CRUD.
+ * دلیل اصلاح: استفاده از نام یکتا با Math.random برای جلوگیری از خطای تکراری بودن در اجراهای متوالی تست.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
@@ -38,9 +38,9 @@ describe("Membership Management", () => {
     const studentLogin = await request(app).post("/api/v1/auth/login").send({ email: studentEmail, password: "Password123" });
     studentToken = studentLogin.body.data.accessToken;
 
-    // ۳. ساخت رشته ورزشی (مستقیم در دیتابیس)
+    // ۳. ساخت رشته ورزشی (مستقیم در دیتابیس) با نام کاملاً یکتا
     const sport = await prisma.sport.create({
-      data: { name: `رشته تست ${Date.now()}` },
+      data: { name: `رشته تست ${Date.now()}-${Math.random()}` },
     });
     sportId = sport.id;
   });
