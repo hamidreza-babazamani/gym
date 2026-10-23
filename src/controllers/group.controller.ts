@@ -101,33 +101,46 @@ export const addMember = asyncHandler(async (req: AuthenticatedRequest, res: Res
     throw new ApiError(404, "گروه پیدا نشد یا شما اجازه دسترسی ندارید.");
   }
 
-  // بررسی ظرفیت به صورت اتمیک
-  const memberCount = await prisma.groupMember.count({ where: { groupId, leftAt: null } });
-  if (memberCount >= group.capacity) {
-    throw new ApiError(400, "ظرفیت گروه تکمیل است.");
-  }
-
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new ApiError(404, "کاربر پیدا نشد.");
   }
 
-  // بررسی اینکه آیا کاربر قبلاً عضو گروه بوده یا نه
-  const existing = await prisma.groupMember.findUnique({
-    where: { groupId_userId: { groupId, userId } },
+  // استفاده از تراکنش برای جلوگیری از Race Condition در ظرفیت
+  await prisma.$transaction(async (tx) => {
+    // قفل کردن گروه برای جلوگیری از درخواست همزمان (Lock Row)
+    const lockedGroup = await tx.$queryRaw<Array<{ capacity: number }>>`
+      SELECT capacity FROM groups WHERE id = ${groupId}::uuid FOR UPDATE
+    `;
+
+    if (!lockedGroup.length) {
+      throw new ApiError(404, "گروه پیدا نشد.");
+    }
+
+    const memberCount = await tx.groupMember.count({
+      where: { groupId, leftAt: null },
+    });
+
+    if (memberCount >= lockedGroup[0].capacity) {
+      throw new ApiError(400, "ظرفیت گروه تکمیل است.");
+    }
+
+    const existing = await tx.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+
+    if (existing && !existing.leftAt) {
+      throw new ApiError(409, "این کاربر از قبل عضو گروه است.");
+    }
+
+    await tx.groupMember.upsert({
+      where: { groupId_userId: { groupId, userId } },
+      update: { joinedAt: new Date(), leftAt: null },
+      create: { groupId, userId },
+    });
   });
 
-  if (existing && !existing.leftAt) {
-    throw new ApiError(409, "این کاربر از قبل عضو گروه است.");
-  }
-
-  const member = await prisma.groupMember.upsert({
-    where: { groupId_userId: { groupId, userId } },
-    update: { joinedAt: new Date(), leftAt: null },
-    create: { groupId, userId },
-  });
-
-  return sendSuccess(res, "کاربر با موفقیت به گروه اضافه شد.", { member }, 201);
+  return sendSuccess(res, "کاربر با موفقیت به گروه اضافه شد.", {}, 201);
 });
 
 // حذف عضو از گروه

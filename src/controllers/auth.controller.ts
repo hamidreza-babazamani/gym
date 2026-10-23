@@ -332,24 +332,25 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
 
   const newPasswordHash = await bcrypt.hash(newPassword, 12);
 
-  // استفاده از تراکنش برای جلوگیری از Race Condition (درخواست‌های همزمان)
+  // استفاده از تراکنش و علامت‌گذاری اتمیک توکن برای جلوگیری از Race Condition
   await prisma.$transaction(async (tx) => {
-    // ۱. علامت‌گذاری توکن به عنوان استفاده‌شده
-    await tx.passwordResetToken.update({
-      where: { id: resetRecord.id },
+    // علامت‌گذاری توکن به عنوان استفاده‌شده (فقط اگر قبلاً استفاده نشده باشد)
+    const markUsed = await tx.passwordResetToken.updateMany({
+      where: { id: resetRecord.id, usedAt: null },
       data: { usedAt: new Date() },
     });
 
-    // ۲. آپدیت رمز عبور
+    if (markUsed.count === 0) {
+      throw new ApiError(400, "توکن بازیابی قبلاً استفاده شده است.");
+    }
+
+    // آپدیت رمز عبور
     await tx.user.update({
       where: { id: resetRecord.userId },
-      data: { 
-        passwordHash: newPasswordHash,
-        passwordChangedAt: new Date()
-      },
+      data: { passwordHash: newPasswordHash, passwordChangedAt: new Date() },
     });
 
-    // ۳. باطل کردن تمام نشست‌ها
+    // باطل کردن تمام نشست‌های کاربر
     await tx.session.updateMany({
       where: { userId: resetRecord.userId, revokedAt: null },
       data: { revokedAt: new Date() },
