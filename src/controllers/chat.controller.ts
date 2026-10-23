@@ -66,7 +66,7 @@ export const createGroupConversation = asyncHandler(async (req: AuthenticatedReq
   return sendSuccess(res, "گروه با موفقیت ایجاد شد.", { conversation }, 201);
 });
 
-// دریافت لیست مکالمات
+// دریافت لیست مکالمات کاربر (با شمارش پیام‌های خوانده‌نشده)
 export const listConversations = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.id;
 
@@ -86,7 +86,29 @@ export const listConversations = asyncHandler(async (req: AuthenticatedRequest, 
     orderBy: { updatedAt: "desc" },
   });
 
-  return sendSuccess(res, "لیست مکالمات دریافت شد.", { conversations });
+  // محاسبه تعداد پیام‌های خوانده‌نشده برای هر مکالمه
+  const conversationsWithUnreadCount = await Promise.all(
+    conversations.map(async (conv) => {
+      // پیدا کردن اطلاعات عضویت کاربر در این مکالمه
+      const member = await prisma.conversationMember.findUnique({
+        where: { conversationId_userId: { conversationId: conv.id, userId } },
+        select: { lastReadAt: true },
+      });
+
+      // شمارش پیام‌های جدیدتر از lastReadAt (یا همه پیام‌ها اگر lastReadAt null باشد)
+      const unreadCount = await prisma.message.count({
+        where: {
+          conversationId: conv.id,
+          ...(member?.lastReadAt ? { createdAt: { gt: member.lastReadAt } } : {}),
+          NOT: { senderId: userId }, // پیام‌های خود کاربر رو نشمار
+        },
+      });
+
+      return { ...conv, unreadCount };
+    })
+  );
+
+  return sendSuccess(res, "لیست مکالمات دریافت شد.", { conversations: conversationsWithUnreadCount });
 });
 
 // دریافت تاریخچه پیام‌ها (با صفحه‌بندی صحیح)
