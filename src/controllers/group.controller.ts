@@ -169,3 +169,58 @@ export const removeMember = asyncHandler(async (req: AuthenticatedRequest, res: 
 
   return sendSuccess(res, "کاربر با موفقیت از گروه حذف شد.");
 });
+// اختصاص یک برنامه تمرینی به کل گروه
+export const assignProgramToGroup = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const groupId = String(req.params.id);
+  const { programId } = req.body;
+  const coachId = req.user!.id;
+
+  // بررسی اینکه گروه مال این مربی است
+  const group = await prisma.group.findFirst({
+    where: { id: groupId, coachId, isActive: true },
+  });
+  if (!group) {
+    throw new ApiError(404, "گروه فعال پیدا نشد یا شما اجازه دسترسی ندارید.");
+  }
+
+  // بررسی اینکه برنامه مال این مربی است
+  const program = await prisma.program.findFirst({
+    where: { id: programId, coachId },
+  });
+  if (!program) {
+    throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+  }
+
+  // بررسی اینکه آیا این برنامه قبلاً به این گروه اختصاص داده شده یا نه
+  const existing = await prisma.programAssignment.findFirst({
+    where: { programId, groupId },
+  });
+
+  if (existing) {
+    throw new ApiError(409, "این برنامه قبلاً به این گروه اختصاص داده شده است.");
+  }
+
+  const assignment = await prisma.programAssignment.create({
+    data: { programId, groupId },
+  });
+
+  return sendSuccess(res, "برنامه با موفقیت به گروه اختصاص یافت.", { assignment }, 201);
+});
+
+// حذف (غیرفعال کردن) گروه
+export const deleteGroup = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const id = String(req.params.id);
+  const coachId = req.user!.id;
+
+  const group = await prisma.group.findFirst({ where: { id, coachId } });
+  if (!group) {
+    throw new ApiError(404, "گروه پیدا نشد یا شما اجازه دسترسی ندارید.");
+  }
+
+  await prisma.group.update({
+    where: { id },
+    data: { isActive: false },
+  });
+
+  return sendSuccess(res, "گروه با موفقیت غیرفعال شد.");
+});

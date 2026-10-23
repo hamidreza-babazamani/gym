@@ -1,6 +1,6 @@
 /**
  * تست‌های مربوط به مدیریت گروه‌ها.
- * دلیل استفاده: بررسی دسترسی‌ها، عملکرد صحیح افزودن عضو و کنترل ظرفیت.
+ * دلیل اصلاح: اضافه شدن تست برای اختصاص برنامه به گروه و غیرفعال کردن گروه.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import request from "supertest";
@@ -12,6 +12,7 @@ describe("Group Management", () => {
   let studentToken: string;
   let studentId: string;
   let groupId: string;
+  let programId: string;
 
   beforeAll(async () => {
     // ۱. ساخت مربی
@@ -37,6 +38,13 @@ describe("Group Management", () => {
     studentId = studentUser!.id;
     const studentLogin = await request(app).post("/api/v1/auth/login").send({ email: studentEmail, password: "Password123" });
     studentToken = studentLogin.body.data.accessToken;
+
+    // ۳. ساخت یک برنامه تمرینی برای تست
+    const programRes = await request(app)
+      .post("/api/v1/programs")
+      .set("Authorization", `Bearer ${coachToken}`)
+      .send({ name: `برنامه تست ${Date.now()}` });
+    programId = programRes.body.data.program.id;
   });
 
   it("باید به شاگرد اجازه ساخت گروه ندهد (خطای 403)", async () => {
@@ -58,6 +66,15 @@ describe("Group Management", () => {
     groupId = res.body.data.group.id;
   });
 
+  it("باید برنامه را به گروه اختصاص دهد", async () => {
+    const res = await request(app)
+      .post(`/api/v1/groups/${groupId}/assign-program`)
+      .set("Authorization", `Bearer ${coachToken}`)
+      .send({ programId });
+
+    expect(res.status).toBe(201);
+  });
+
   it("باید عضو را به گروه اضافه کند", async () => {
     const res = await request(app)
       .post(`/api/v1/groups/${groupId}/members`)
@@ -68,7 +85,6 @@ describe("Group Management", () => {
   });
 
   it("باید از پر شدن بیش از ظرفیت جلوگیری کند", async () => {
-    // ظرفیت ۲ است. یک عضو داریم. یک شاگرد دیگر اضافه می‌کنیم.
     const student2Email = `student2-group-${Date.now()}@example.com`;
     await request(app).post("/api/v1/auth/register").send({
       fullName: "شاگرد دوم",
@@ -77,13 +93,11 @@ describe("Group Management", () => {
     });
     const student2 = await prisma.user.findUnique({ where: { email: student2Email } });
 
-    // عضو دوم را اضافه کن (باید موفق باشد)
     await request(app)
       .post(`/api/v1/groups/${groupId}/members`)
       .set("Authorization", `Bearer ${coachToken}`)
       .send({ userId: student2!.id });
 
-    // عضو سوم را اضافه کن (باید خطای 400 بدهد)
     const student3Email = `student3-group-${Date.now()}@example.com`;
     await request(app).post("/api/v1/auth/register").send({
       fullName: "شاگرد سوم",
@@ -99,5 +113,16 @@ describe("Group Management", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("ظرفیت گروه تکمیل است.");
+  });
+
+  it("باید گروه را غیرفعال کند", async () => {
+    const res = await request(app)
+      .delete(`/api/v1/groups/${groupId}`)
+      .set("Authorization", `Bearer ${coachToken}`);
+
+    expect(res.status).toBe(200);
+    
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    expect(group?.isActive).toBe(false);
   });
 });

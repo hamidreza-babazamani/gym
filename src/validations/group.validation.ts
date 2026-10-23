@@ -26,3 +26,8 @@ export const addMemberSchema = z.object({
     userId: z.string().uuid("شناسه کاربر معتبر نیست."),
   }),
 });
+export const assignProgramToGroupSchema = z.object({
+  body: z.object({
+    programId: z.string().uuid("شناسه برنامه معتبر نیست."),
+  }),
+});
