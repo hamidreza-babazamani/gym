@@ -16,6 +16,7 @@ import authRoutes from "./routes/auth.routes";
 import adminRoutes from "./routes/admin.routes";
 import coachStudentRoutes from "./routes/coach-student.routes";
 import sportRoutes from "./routes/sport.routes";
+import membershipRoutes from "./routes/membership.routes";
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/v1/auth", authLimiter, authRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1", coachStudentRoutes);
 app.use("/api/v1/sports", sportRoutes);
+app.use("/api/v1/memberships", membershipRoutes);
 
 // ۸. مدیریت مسیرهای نامعتبر
 app.use(notFoundMiddleware);

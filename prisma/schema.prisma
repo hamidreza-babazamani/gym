@@ -42,6 +42,12 @@ enum CoachStudentInitiator {
   STUDENT
 }
 
+enum MembershipStatus {
+  ACTIVE     // فعال
+  EXPIRED    // منقضی شده
+  CANCELLED  // لغو شده
+}
+
 // ==============================================
 // User & Auth
 // ==============================================
@@ -73,6 +79,8 @@ model User {
   
   coaching           CoachStudent[] @relation("Coach")
   training           CoachStudent[] @relation("Student")
+  
+  memberships        Membership[]
 
   @@index([status])
   @@index([deletedAt])
@@ -140,7 +148,7 @@ model EmailVerificationToken {
 }
 
 // ==============================================
-// Sport (رشته ورزشی - فاز ۶)
+// Sport (رشته ورزشی)
 // ==============================================
 
 model Sport {
@@ -154,13 +162,14 @@ model Sport {
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   coachStudents CoachStudent[]
+  memberships   Membership[]
 
   @@index([isActive, sortOrder])
   @@map("sports")
 }
 
 // ==============================================
-// CoachStudent (فاز ۷)
+// CoachStudent
 // ==============================================
 
 model CoachStudent {
@@ -187,4 +196,27 @@ model CoachStudent {
   @@index([studentId, status])
   @@index([sportId, status])
   @@map("coach_students")
+}
+
+// ==============================================
+// Membership (عضویت در رشته‌ها - فاز ۸)
+// ==============================================
+
+model Membership {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  sportId   String           @map("sport_id") @db.Uuid
+  status    MembershipStatus @default(ACTIVE)
+  startsAt  DateTime         @map("starts_at") @db.Timestamptz(3)
+  endsAt    DateTime         @map("ends_at") @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([sportId, status])
+  @@index([endsAt])
+  @@map("memberships")
 }
