@@ -39,3 +39,14 @@ export const resendVerificationLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+// محدودیت آپلود فایل (برای جلوگیری از DoS)
+export const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // ۱۵ دقیقه
+  max: 20, // حداکثر ۲۰ فایل در هر ۱۵ دقیقه
+  message: {
+    success: false,
+    message: "تعداد درخواست‌های آپلود شما بیش از حد مجاز است. لطفاً بعداً تلاش کنید.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

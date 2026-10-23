@@ -19,6 +19,7 @@ import sportRoutes from "./routes/sport.routes";
 import membershipRoutes from "./routes/membership.routes";
 import programRoutes from "./routes/program.routes";
 import groupRoutes from "./routes/group.routes";
+import fileRoutes from "./routes/file.routes";
 
 const app = express();
 
@@ -37,6 +38,8 @@ app.use(pinoHttp({ logger }));
 // ۴. پارس کردن بدنه درخواست‌ها
 app.use(express.json({ limit: "10kb" }));
 
+//app.use("/uploads", express.static("uploads"));
+
 // ۵. مسیر Health Check (بدون Rate Limit)
 app.use("/api/v1/health", healthRoutes);
 
@@ -51,6 +54,7 @@ app.use("/api/v1/sports", sportRoutes);
 app.use("/api/v1/memberships", membershipRoutes);
 app.use("/api/v1/programs", programRoutes);
 app.use("/api/v1/groups", groupRoutes);
+app.use("/api/v1/files", fileRoutes);
 
 // ۸. مدیریت مسیرهای نامعتبر
 app.use(notFoundMiddleware);

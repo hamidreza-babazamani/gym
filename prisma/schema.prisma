@@ -88,6 +88,8 @@ model User {
   
   ownedGroups        Group[]
   groupMemberships   GroupMember[]
+  files              File[]
+
   groupMemberOverrides GroupMemberOverride[]
 
   @@index([status])
@@ -99,7 +101,6 @@ model UserRole {
   userId String @map("user_id") @db.Uuid
   role   Role
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@id([userId, role])
   @@index([role])
   @@map("user_roles")
@@ -427,4 +428,32 @@ model ProgramVersion {
 
   @@unique([programId, version])
   @@map("program_versions")
+}
+// ==============================================
+// File (فایل، تصویر، ویدیو - فاز ۱۱)
+// ==============================================
+
+enum FileType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+model File {
+  id           String   @id @default(uuid()) @db.Uuid
+  ownerId      String   @map("owner_id") @db.Uuid
+  originalName String   @map("original_name") @db.VarChar(255)
+  storedName   String   @map("stored_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(100)
+  size         Int      // حجم به بایت
+  type         FileType
+  path         String   @db.VarChar(500)
+  isPrivate    Boolean  @default(true) @map("is_private")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([type])
+  @@map("files")
 }
