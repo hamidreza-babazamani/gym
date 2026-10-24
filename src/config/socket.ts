@@ -1,6 +1,6 @@
 /**
  * پیکربندی Socket.IO.
- * دلیل اصلاح نهایی: پوشش کامل باگ‌های امنیتی (UUID، leftAt، Rate Limit، Data Integrity و Memory Leak).
+ * دلیل اصلاح نهایی: به‌روزرسانی updatedAt مکالمه هنگام ارسال پیام و بهبود مدیریت خطا.
  */
 import { Server, Socket } from "socket.io";
 import http from "http";
@@ -15,21 +15,13 @@ interface AuthenticatedSocket extends Socket {
 
 let io: Server;
 
-// محدودیت نرخ ارسال پیام (۱۰ پیام در ۱۰ ثانیه)
 const messageRateLimit = new Map<string, { count: number; lastReset: number }>();
 const MESSAGE_RATE_WINDOW = 10000;
 const MESSAGE_RATE_MAX = 10;
-
-// محدودیت نرخ پیوستن به مکالمه (۱۰ بار در ۱ دقیقه)
 const joinRateLimit = new Map<string, { count: number; lastReset: number }>();
-const JOIN_RATE_WINDOW = 60000;
-const JOIN_RATE_MAX = 10;
-
-// محدودیت نرخ تایپ کردن (برای جلوگیری از اسپم)
 const typingRateLimit = new Map<string, number>();
-const TYPING_RATE_WINDOW = 1000; // ۱ ثانیه
+const TYPING_RATE_WINDOW = 1000;
 
-// تابع کمکی برای بررسی معتبر بودن UUID
 const isValidUUID = (uuid: string) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(uuid);
@@ -71,7 +63,7 @@ export const initSocket = (server: http.Server) => {
     logger.info(`User connected: ${userId}`);
     socket.join(`user:${userId}`);
 
-    // ۲. پیوستن به اتاق مکالمه (با کنترل نرخ و بررسی leftAt)
+    // ۲. پیوستن به اتاق مکالمه
     socket.on("conversation:join", async (conversationId: unknown) => {
       try {
         if (typeof conversationId !== "string" || !isValidUUID(conversationId)) {
@@ -80,11 +72,11 @@ export const initSocket = (server: http.Server) => {
 
         const now = Date.now();
         const userJoinRate = joinRateLimit.get(userId) || { count: 0, lastReset: now };
-        if (now - userJoinRate.lastReset > JOIN_RATE_WINDOW) {
+        if (now - userJoinRate.lastReset > 60000) {
           userJoinRate.count = 0;
           userJoinRate.lastReset = now;
         }
-        if (userJoinRate.count >= JOIN_RATE_MAX) {
+        if (userJoinRate.count >= 10) {
           return socket.emit("error", { message: "تعداد درخواست‌های شما بیش از حد مجاز است." });
         }
         userJoinRate.count++;
@@ -111,7 +103,7 @@ export const initSocket = (server: http.Server) => {
       }
     });
 
-    // ۳. ارسال پیام (با اعتبارسنجی کامل، Rate Limit و بررسی مالکیت)
+    // ۳. ارسال پیام
     socket.on("message:send", async (data: any) => {
       try {
         if (!data || typeof data !== "object") return socket.emit("error", { message: "داده‌های نامعتبر." });
@@ -182,6 +174,12 @@ export const initSocket = (server: http.Server) => {
           },
         });
 
+        // به‌روزرسانی updatedAt مکالمه
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { updatedAt: new Date() },
+        });
+
         const members = await prisma.conversationMember.findMany({
           where: { conversationId, leftAt: null },
           select: { userId: true },
@@ -196,14 +194,14 @@ export const initSocket = (server: http.Server) => {
       }
     });
 
-    // ۴. وضعیت تایپ کردن (با کنترل نرخ و بررسی عضویت)
+    // ۴. وضعیت تایپ کردن
     socket.on("typing:start", async (data: any) => {
       try {
         if (!data || typeof data.conversationId !== "string" || !isValidUUID(data.conversationId)) return;
 
         const now = Date.now();
         const lastTyping = typingRateLimit.get(userId) || 0;
-        if (now - lastTyping < TYPING_RATE_WINDOW) return; // جلوگیری از اسپم
+        if (now - lastTyping < TYPING_RATE_WINDOW) return;
         typingRateLimit.set(userId, now);
 
         const senderMember = await prisma.conversationMember.findUnique({
@@ -248,7 +246,7 @@ export const initSocket = (server: http.Server) => {
       }
     });
 
-    // ۵. قطع اتصال و پاکسازی حافظه
+    // ۵. قطع اتصال
     socket.on("disconnect", () => {
       logger.info(`User disconnected: ${userId}`);
       messageRateLimit.delete(userId);

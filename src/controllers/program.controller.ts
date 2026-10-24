@@ -1,6 +1,6 @@
 /**
  * کنترلرهای مدیریت برنامه‌های تمرینی.
- * دلیل اصلاح: اضافه شدن گرفتن نسخه پشتیبان در تابع آپدیت برنامه.
+ * دلیل اصلاح نهایی: بهبود دسترسی گروهی، بررسی leftAt و isActive.
  */
 import { Response } from "express";
 import prisma from "../lib/prisma";
@@ -9,7 +9,6 @@ import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
-// تابع کمکی برای گرفتن نسخه پشتیبان از برنامه
 const createProgramSnapshot = async (programId: string) => {
   const program = await prisma.program.findUnique({
     where: { id: programId },
@@ -20,26 +19,17 @@ const createProgramSnapshot = async (programId: string) => {
       },
     },
   });
-
   if (!program) return;
-
   const lastVersion = await prisma.programVersion.findFirst({
     where: { programId },
     orderBy: { version: "desc" },
   });
-
   const nextVersion = lastVersion ? lastVersion.version + 1 : 1;
-
   await prisma.programVersion.create({
-    data: {
-      programId,
-      version: nextVersion,
-      snapshot: JSON.parse(JSON.stringify(program)),
-    },
+    data: { programId, version: nextVersion, snapshot: JSON.parse(JSON.stringify(program)) },
   });
 };
 
-// ساخت تمرین جدید
 export const createExercise = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { name, description, muscleGroup } = req.body;
   const existing = await prisma.exercise.findUnique({ where: { name } });
@@ -48,7 +38,6 @@ export const createExercise = asyncHandler(async (req: AuthenticatedRequest, res
   return sendSuccess(res, "تمرین با موفقیت ایجاد شد.", { exercise }, 201);
 });
 
-// ساخت برنامه جدید
 export const createProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { name, description, isTemplate } = req.body;
   const coachId = req.user!.id;
@@ -58,18 +47,13 @@ export const createProgram = asyncHandler(async (req: AuthenticatedRequest, res:
   return sendSuccess(res, "برنامه تمرینی با موفقیت ایجاد شد.", { program }, 201);
 });
 
-// ویرایش برنامه (با نسخه‌بندی)
 export const updateProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const { name, description, isTemplate } = req.body;
   const coachId = req.user!.id;
-
   const program = await prisma.program.findFirst({ where: { id, coachId } });
   if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
-
-  // گرفتن نسخه پشتیبان قبل از تغییر
   await createProgramSnapshot(id);
-
   const updated = await prisma.program.update({
     where: { id },
     data: {
@@ -78,11 +62,9 @@ export const updateProgram = asyncHandler(async (req: AuthenticatedRequest, res:
       ...(isTemplate !== undefined ? { isTemplate } : {}),
     },
   });
-
   return sendSuccess(res, "برنامه با موفقیت ویرایش شد.", { program: updated });
 });
 
-// حذف برنامه
 export const deleteProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const coachId = req.user!.id;
@@ -92,7 +74,6 @@ export const deleteProgram = asyncHandler(async (req: AuthenticatedRequest, res:
   return sendSuccess(res, "برنامه و تمام محتویات آن با موفقیت حذف شد.");
 });
 
-// اضافه کردن روز به برنامه
 export const addDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const programId = String(req.params.programId);
   const { dayOfWeek, name } = req.body;
@@ -105,7 +86,6 @@ export const addDay = asyncHandler(async (req: AuthenticatedRequest, res: Respon
   return sendSuccess(res, "روز تمرینی با موفقیت اضافه شد.", { day }, 201);
 });
 
-// ویرایش روز تمرینی
 export const updateProgramDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const { name, dayOfWeek } = req.body;
@@ -119,7 +99,6 @@ export const updateProgramDay = asyncHandler(async (req: AuthenticatedRequest, r
   return sendSuccess(res, "روز تمرینی با موفقیت ویرایش شد.", { day: updated });
 });
 
-// حذف روز تمرینی
 export const deleteProgramDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const coachId = req.user!.id;
@@ -129,7 +108,6 @@ export const deleteProgramDay = asyncHandler(async (req: AuthenticatedRequest, r
   return sendSuccess(res, "روز تمرینی و تمرین‌های آن با موفقیت حذف شد.");
 });
 
-// اضافه کردن تمرین به روز
 export const addExerciseToDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const dayId = String(req.params.dayId);
   const { exerciseId, sets, reps, weight, restTime, order } = req.body;
@@ -146,7 +124,6 @@ export const addExerciseToDay = asyncHandler(async (req: AuthenticatedRequest, r
   return sendSuccess(res, "تمرین با موفقیت به روز اضافه شد.", { programExercise }, 201);
 });
 
-// ویرایش تمرین در برنامه
 export const updateProgramExercise = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const { sets, reps, weight, restTime, order } = req.body;
@@ -166,7 +143,6 @@ export const updateProgramExercise = asyncHandler(async (req: AuthenticatedReque
   return sendSuccess(res, "تمرین با موفقیت ویرایش شد.", { programExercise: updated });
 });
 
-// حذف تمرین از برنامه
 export const deleteProgramExercise = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const coachId = req.user!.id;
@@ -179,7 +155,6 @@ export const deleteProgramExercise = asyncHandler(async (req: AuthenticatedReque
   return sendSuccess(res, "تمرین با موفقیت از برنامه حذف شد.");
 });
 
-// دریافت جزئیات یک برنامه
 export const getProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const currentUser = req.user!;
@@ -190,18 +165,36 @@ export const getProgram = asyncHandler(async (req: AuthenticatedRequest, res: Re
     },
   });
   if (!program) throw new ApiError(404, "برنامه پیدا نشد.");
+  
   const isAdmin = currentUser.roles.includes("ADMIN") || currentUser.roles.includes("SUPER_ADMIN");
   const isOwnerCoach = program.coachId === currentUser.id;
+  
   if (!isAdmin && !isOwnerCoach) {
-    const assignment = await prisma.programAssignment.findFirst({
+    // بررسی دسترسی مستقیم
+    const directAssignment = await prisma.programAssignment.findFirst({
       where: { programId: program.id, studentId: currentUser.id, isActive: true },
     });
-    if (!assignment) throw new ApiError(403, "شما اجازه دسترسی به این برنامه را ندارید.");
+    
+    // بررسی دسترسی از طریق گروه
+    const groupAssignment = await prisma.programAssignment.findFirst({
+      where: { 
+        programId: program.id, 
+        group: { 
+          members: { some: { userId: currentUser.id, leftAt: null } },
+          isActive: true
+        },
+        isActive: true 
+      },
+    });
+
+    if (!directAssignment && !groupAssignment) {
+      throw new ApiError(403, "شما اجازه دسترسی به این برنامه را ندارید.");
+    }
   }
+  
   return sendSuccess(res, "جزئیات برنامه دریافت شد.", { program });
 });
 
-// اختصاص برنامه به ورزشکار
 export const assignProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const programId = String(req.params.programId);
   const { studentId } = req.body;
@@ -218,7 +211,6 @@ export const assignProgram = asyncHandler(async (req: AuthenticatedRequest, res:
   return sendSuccess(res, "برنامه با موفقیت به ورزشکار اختصاص یافت.", { assignment }, 201);
 });
 
-// اختصاص دسته‌ای برنامه
 export const assignProgramBulk = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const programId = String(req.params.programId);
   const { studentIds } = req.body;
@@ -239,7 +231,6 @@ export const assignProgramBulk = asyncHandler(async (req: AuthenticatedRequest, 
   return sendSuccess(res, "عملیات اختصاص دسته‌ای انجام شد.", { results }, 201);
 });
 
-// ثبت اجرای واقعی تمرین
 export const logExercise = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { programExerciseId, actualSets, actualReps, actualWeight, notes } = req.body;
   const studentId = req.user!.id;
@@ -247,21 +238,26 @@ export const logExercise = asyncHandler(async (req: AuthenticatedRequest, res: R
     where: { id: programExerciseId }, include: { day: { include: { program: true } } },
   });
   if (!programExercise) throw new ApiError(404, "تمرین پیدا نشد.");
+  
   const isAssigned = await prisma.programAssignment.findFirst({
     where: {
       programId: programExercise.day.programId,
-      OR: [{ studentId }, { group: { members: { some: { userId: studentId, leftAt: null } } } }],
+      OR: [
+        { studentId },
+        { group: { members: { some: { userId: studentId, leftAt: null } }, isActive: true } }
+      ],
       isActive: true,
     },
   });
+  
   if (!isAssigned) throw new ApiError(403, "شما به این برنامه دسترسی ندارید.");
+  
   const log = await prisma.exerciseLog.create({
     data: { programExerciseId, studentId, actualSets, actualReps, actualWeight, notes },
   });
   return sendSuccess(res, "اجرای تمرین با موفقیت ثبت شد.", { log }, 201);
 });
 
-// دریافت لیست نسخه‌ها
 export const listProgramVersions = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const programId = String(req.params.programId);
   const coachId = req.user!.id;
@@ -271,7 +267,6 @@ export const listProgramVersions = asyncHandler(async (req: AuthenticatedRequest
   return sendSuccess(res, "لیست نسخه‌ها دریافت شد.", { versions });
 });
 
-// بازگردانی برنامه به نسخه قبلی
 export const revertProgramToVersion = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const programId = String(req.params.programId);
   const versionId = String(req.params.versionId);

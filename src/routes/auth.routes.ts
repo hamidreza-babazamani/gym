@@ -1,84 +1,45 @@
 /**
  * مسیرهای مربوط به احراز هویت.
- * دلیل آپدیت: اضافه شدن مسیر تغییر ایمیل.
  */
 import { Router } from "express";
 import { 
   login, register, getMe, refresh, logout, changePassword, 
   forgotPassword, resetPassword, updateProfile,
   verifyEmail, resendVerificationEmail,
-  changeEmail
-} from "../controllers/auth.controller";
-import authMiddleware from "../middlewares/auth.middleware";
-import { validate } from "../middlewares/validate.middleware";
-import { 
-  registerSchema, loginSchema, changePasswordSchema, 
-  forgotPasswordSchema, resetPasswordSchema, updateProfileSchema,
-  verifyEmailSchema, changeEmailSchema
-} from "../validations/auth.validation";
-import { z } from "zod";
-// در بخش import:
-import { resendVerificationLimiter } from "../config/rateLimit.config";
-// در بخش import:
-import {
-  // ... بقیه importها
+  changeEmail,
   requestPhoneVerification,
   verifyPhone,
 } from "../controllers/auth.controller";
-import {
-  // ... بقیه importها
-  verifyPhoneSchema,
+import authMiddleware from "../middlewares/auth.middleware";
+import { validate } from "../middlewares/validate.middleware";
+import { resendVerificationLimiter } from "../config/rateLimit.config";
+import { 
+  registerSchema, loginSchema, changePasswordSchema, 
+  forgotPasswordSchema, resetPasswordSchema, updateProfileSchema,
+  verifyEmailSchema, changeEmailSchema, verifyPhoneSchema
 } from "../validations/auth.validation";
+import { z } from "zod";
 
 const router = Router();
 
-// قوانین اعتبارسنجی برای توکن تازه‌سازی
 const refreshSchema = z.object({
   body: z.object({
     refreshToken: z.string().min(1, "توکن تازه‌سازی الزامی است."),
   }),
 });
 
-// ثبت‌نام (با اعتبارسنجی Zod)
 router.post("/register", validate(registerSchema), register);
-
-// ورود (با اعتبارسنجی Zod)
 router.post("/login", validate(loginSchema), login);
-
-// دریافت پروفایل کاربر با توکن معتبر
 router.get("/me", authMiddleware, getMe);
-
-// ویرایش پروفایل کاربر (نیاز به لاگین)
 router.patch("/profile", authMiddleware, validate(updateProfileSchema), updateProfile);
-
-// تغییر ایمیل (نیاز به لاگین و تأیید مجدد)
 router.patch("/change-email", authMiddleware, validate(changeEmailSchema), changeEmail);
-
-// تازه‌سازی توکن
 router.post("/refresh", validate(refreshSchema), refresh);
-
-// خروج
 router.post("/logout", validate(refreshSchema), logout);
-
-// تغییر رمز عبور (نیاز به لاگین)
 router.patch("/change-password", authMiddleware, validate(changePasswordSchema), changePassword);
-
-// درخواست بازیابی رمز عبور
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
-
-// تنظیم رمز عبور جدید
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
-
-// تأیید ایمیل
 router.post("/verify-email", validate(verifyEmailSchema), verifyEmail);
-
-// ارسال مجدد لینک تأیید
-router.post("/resend-verification", validate(forgotPasswordSchema), resendVerificationEmail);
-
-// در بخش مسیرها:
 router.post("/resend-verification", resendVerificationLimiter, validate(forgotPasswordSchema), resendVerificationEmail);
-
-// در بخش مسیرها (به انتهای مسیرها اضافه کن):
 router.post("/request-phone-verification", authMiddleware, requestPhoneVerification);
 router.post("/verify-phone", validate(verifyPhoneSchema), verifyPhone);
 
