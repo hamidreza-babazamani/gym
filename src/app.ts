@@ -21,6 +21,7 @@ import notificationRoutes from "./routes/notification.routes";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
 import progressRoutes from "./routes/progress.routes";
+import paymentRoutes from "./routes/payment.routes";
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/v1/files", fileRoutes);
 app.use("/api/v1/chats", chatRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/progress", progressRoutes);
+app.use("/api/v1/payments", paymentRoutes);
 
 
 app.use(notFoundMiddleware);

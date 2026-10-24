@@ -111,6 +111,7 @@ model User {
   ownedGroups        Group[]
   groupMemberships   GroupMember[]
   groupMemberOverrides GroupMemberOverride[]
+  orders Order[]
   
   files              File[]
   
@@ -605,4 +606,80 @@ model ProgressNote {
   @@index([studentId])
   @@index([coachId])
   @@map("progress_notes")
+}
+// ==============================================
+// Subscription & Payment (اشتراک و پرداخت - فاز ۱۵)
+// ==============================================
+
+enum PlanInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model SubscriptionPlan {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(100)
+  description String?      @db.Text
+  price       Int          // قیمت به تومان
+  interval    PlanInterval @default(MONTHLY)
+  durationDays Int         @map("duration_days") // مدت اعتبار به روز
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  orders Order[]
+
+  @@map("subscription_plans")
+}
+
+model Order {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  planId     String      @map("plan_id") @db.Uuid
+  amount     Int         // مبلغ نهایی
+  status     OrderStatus @default(PENDING)
+  idempotencyKey String? @unique @map("idempotency_key") @db.VarChar(100)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([userId, status])
+  @@index([idempotencyKey])
+  @@map("orders")
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  orderId       String        @map("order_id") @db.Uuid
+  amount        Int
+  status        PaymentStatus @default(PENDING)
+  gatewayName   String?       @map("gateway_name") @db.VarChar(50) // نام درگاه
+  transactionId String?       @unique @map("transaction_id") @db.VarChar(255) // شناسه تراکنش
+  authority     String?       @unique @db.VarChar(255) // کد رهگیری درگاه
+  refId         String?       @map("ref_id") @db.VarChar(255) // شناسه مرجع پرداخت
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
 }

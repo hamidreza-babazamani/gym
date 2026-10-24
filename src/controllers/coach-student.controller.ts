@@ -106,7 +106,6 @@ export const cancelCoachRequest = asyncHandler(async (req: AuthenticatedRequest,
   return sendSuccess(res, "درخواست شما لغو شد.");
 });
 
-// پایان دادن به ارتباط فعال
 export const endCoachStudent = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const relationId = String(req.params.id);
   const userId = req.user?.id;
@@ -122,7 +121,12 @@ export const endCoachStudent = asyncHandler(async (req: AuthenticatedRequest, re
 
   await prisma.coachStudent.update({
     where: { id: relation.id },
-    data: { status: "ENDED", endedAt: new Date(), endedReason: reason || null },
+    data: {
+      status: "ENDED",
+      endedAt: new Date(),
+      endedReason: reason || null,
+      leftAt: new Date(), // ← اضافه شد
+    },
   });
 
   return sendSuccess(res, "ارتباط با موفقیت پایان یافت.");

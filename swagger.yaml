@@ -974,3 +974,73 @@ paths:
         - { in: path, name: id, required: true, schema: { type: string } }
       responses:
         200: { description: موفق }
+  # ==================== PAYMENTS ====================
+  /payments/plans:
+    get:
+      tags: [Payments]
+      summary: لیست پلن‌های اشتراک
+      responses:
+        200: { description: موفق }
+    post:
+      tags: [Payments]
+      summary: ایجاد پلن (ادمین)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price, durationDays]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                price: { type: integer }
+                interval: { type: string, enum: [MONTHLY, YEARLY] }
+                durationDays: { type: integer }
+      responses:
+        201: { description: ایجاد شد }
+
+  /payments/orders:
+    get:
+      tags: [Payments]
+      summary: لیست سفارش‌های کاربر
+      responses:
+        200: { description: موفق }
+    post:
+      tags: [Payments]
+      summary: ایجاد سفارش
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planId]
+              properties:
+                planId: { type: string }
+                idempotencyKey: { type: string }
+      responses:
+        201: { description: ایجاد شد }
+
+  /payments/orders/{orderId}/pay:
+    post:
+      tags: [Payments]
+      summary: شروع پرداخت
+      parameters:
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      responses:
+        200: { description: لینک پرداخت دریافت شد }
+
+  /payments/verify:
+    post:
+      tags: [Payments]
+      summary: تأیید پرداخت
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authority, status]
+              properties:
+                authority: { type: string }
+                status: { type: string, enum: [OK, NOK] }
+      responses:
+        200: { description: موفق }
