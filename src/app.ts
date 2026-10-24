@@ -20,6 +20,7 @@ import chatRoutes from "./routes/chat.routes";
 import notificationRoutes from "./routes/notification.routes";
 import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
+import progressRoutes from "./routes/progress.routes";
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use("/api/v1/groups", groupRoutes);
 app.use("/api/v1/files", fileRoutes);
 app.use("/api/v1/chats", chatRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/progress", progressRoutes);
 
 
 app.use(notFoundMiddleware);

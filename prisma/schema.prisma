@@ -48,6 +48,28 @@ enum MembershipStatus {
   CANCELLED
 }
 
+enum FileType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+enum ConversationType {
+  PRIVATE
+  GROUP
+}
+
+enum NotificationType {
+  COACH_REQUEST
+  COACH_REQUEST_RESPONSE
+  NEW_MESSAGE
+  PROGRAM_ASSIGNED
+  PROGRAM_UPDATED
+  MEMBERSHIP_EXPIRING
+  MEMBERSHIP_EXPIRED
+  SYSTEM
+}
+
 // ==============================================
 // User & Auth
 // ==============================================
@@ -85,14 +107,21 @@ model User {
   programs           Program[]
   programAssignments ProgramAssignment[]
   exerciseLogs       ExerciseLog[]
-  conversationMembers ConversationMember[]
-  sentMessages        Message[]
-  notifications Notification[]
+  
   ownedGroups        Group[]
   groupMemberships   GroupMember[]
-  files              File[]
-
   groupMemberOverrides GroupMemberOverride[]
+  
+  files              File[]
+  
+  conversationMembers ConversationMember[]
+  sentMessages        Message[]
+  
+  notifications      Notification[]
+  
+  progressLogs       ProgressLog[]
+  coachNotes         ProgressNote[] @relation("CoachNotes")
+  studentNotes       ProgressNote[] @relation("StudentNotes")
 
   @@index([status])
   @@index([deletedAt])
@@ -103,6 +132,7 @@ model UserRole {
   userId String @map("user_id") @db.Uuid
   role   Role
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([userId, role])
   @@index([role])
   @@map("user_roles")
@@ -194,6 +224,7 @@ model CoachStudent {
   startedAt       DateTime?             @map("started_at") @db.Timestamptz(3)
   endedAt         DateTime?             @map("ended_at") @db.Timestamptz(3)
   endedReason     String?               @map("ended_reason") @db.VarChar(500)
+  leftAt          DateTime?             @map("left_at") @db.Timestamptz(3)  // ← فیلد جدید
   
   createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -397,14 +428,14 @@ model GroupMember {
 }
 
 // ==============================================
-// GroupMemberOverride (تغییرات اختصاصی هر عضو - فاز ۱۰)
+// GroupMemberOverride
 // ==============================================
 
 model GroupMemberOverride {
   id        String   @id @default(uuid()) @db.Uuid
   groupId   String   @map("group_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
-  overrides Json     // تغییرات اختصاصی (مثلاً {"sets": 5, "weight": 80})
+  overrides Json
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -416,14 +447,14 @@ model GroupMemberOverride {
 }
 
 // ==============================================
-// ProgramVersion (نسخه‌بندی برنامه - فاز ۹)
+// ProgramVersion
 // ==============================================
 
 model ProgramVersion {
   id        String   @id @default(uuid()) @db.Uuid
   programId String   @map("program_id") @db.Uuid
   version   Int
-  snapshot  Json     // کل ساختار برنامه در این لحظه
+  snapshot  Json
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -431,15 +462,10 @@ model ProgramVersion {
   @@unique([programId, version])
   @@map("program_versions")
 }
-// ==============================================
-// File (فایل، تصویر، ویدیو - فاز ۱۱)
-// ==============================================
 
-enum FileType {
-  IMAGE
-  VIDEO
-  DOCUMENT
-}
+// ==============================================
+// File
+// ==============================================
 
 model File {
   id           String   @id @default(uuid()) @db.Uuid
@@ -447,31 +473,28 @@ model File {
   originalName String   @map("original_name") @db.VarChar(255)
   storedName   String   @map("stored_name") @db.VarChar(255)
   mimeType     String   @map("mime_type") @db.VarChar(100)
-  size         Int      // حجم به بایت
+  size         Int
   type         FileType
   path         String   @db.VarChar(500)
   isPrivate    Boolean  @default(true) @map("is_private")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  messages Message[]
+  
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  messages Message[]
 
   @@index([ownerId])
   @@index([type])
   @@map("files")
 }
-// ==============================================
-// Chat (چت خصوصی و گروهی - فاز ۱۲)
-// ==============================================
 
-enum ConversationType {
-  PRIVATE
-  GROUP
-}
+// ==============================================
+// Chat
+// ==============================================
 
 model Conversation {
   id        String           @id @default(uuid()) @db.Uuid
   type      ConversationType @default(PRIVATE)
-  title     String?          @db.VarChar(150) // برای گروه‌ها
+  title     String?          @db.VarChar(150)
   createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -487,7 +510,7 @@ model ConversationMember {
   userId         String    @map("user_id") @db.Uuid
   joinedAt       DateTime  @default(now()) @map("joined_at") @db.Timestamptz(3)
   lastReadAt     DateTime? @map("last_read_at") @db.Timestamptz(3)
-  leftAt         DateTime? @map("left_at") @db.Timestamptz(3)  // ← این خط اضافه شد
+  leftAt         DateTime? @map("left_at") @db.Timestamptz(3)
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -502,8 +525,8 @@ model Message {
   conversationId String   @map("conversation_id") @db.Uuid
   senderId       String   @map("sender_id") @db.Uuid
   content        String?  @db.Text
-  fileId         String?  @map("file_id") @db.Uuid // برای پیام‌های فایل‌دار
-  replyToId      String?  @map("reply_to_id") @db.Uuid // پاسخ به پیام دیگر
+  fileId         String?  @map("file_id") @db.Uuid
+  replyToId      String?  @map("reply_to_id") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -516,20 +539,10 @@ model Message {
   @@index([senderId])
   @@map("messages")
 }
-// ==============================================
-// Notification (اعلان‌ها - فاز ۱۳)
-// ==============================================
 
-enum NotificationType {
-  COACH_REQUEST
-  COACH_REQUEST_RESPONSE
-  NEW_MESSAGE
-  PROGRAM_ASSIGNED
-  PROGRAM_UPDATED
-  MEMBERSHIP_EXPIRING
-  MEMBERSHIP_EXPIRED
-  SYSTEM
-}
+// ==============================================
+// Notification
+// ==============================================
 
 model Notification {
   id        String           @id @default(uuid()) @db.Uuid
@@ -537,7 +550,7 @@ model Notification {
   type      NotificationType
   title     String           @db.VarChar(200)
   body      String           @db.Text
-  data      Json?            // اطلاعات اضافی (مثلاً id مکالمه یا برنامه)
+  data      Json?
   isRead    Boolean          @default(false) @map("is_read")
   readAt    DateTime?        @map("read_at") @db.Timestamptz(3)
   createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -547,4 +560,49 @@ model Notification {
   @@index([userId, isRead])
   @@index([createdAt])
   @@map("notifications")
+}
+
+// ==============================================
+// ProgressLog
+// ==============================================
+
+model ProgressLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  weight      Float?
+  bodyFat     Float?   @map("body_fat")
+  chest       Float?
+  waist       Float?
+  hips        Float?
+  arms        Float?
+  legs        Float?
+  notes       String?  @db.Text
+  recordedAt  DateTime @default(now()) @map("recorded_at") @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)  // ← فیلد جدید
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recordedAt])
+  @@map("progress_logs")
+}
+
+// ==============================================
+// ProgressNote
+// ==============================================
+
+model ProgressNote {
+  id         String   @id @default(uuid()) @db.Uuid
+  coachId    String   @map("coach_id") @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid
+  content    String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)  // ← فیلد جدید
+
+  coach   User @relation("CoachNotes", fields: [coachId], references: [id], onDelete: Cascade)
+  student User @relation("StudentNotes", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([coachId])
+  @@map("progress_notes")
 }
