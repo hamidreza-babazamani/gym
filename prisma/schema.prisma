@@ -87,6 +87,7 @@ model User {
   exerciseLogs       ExerciseLog[]
   conversationMembers ConversationMember[]
   sentMessages        Message[]
+  notifications Notification[]
   ownedGroups        Group[]
   groupMemberships   GroupMember[]
   files              File[]
@@ -514,4 +515,36 @@ model Message {
   @@index([conversationId, createdAt])
   @@index([senderId])
   @@map("messages")
+}
+// ==============================================
+// Notification (اعلان‌ها - فاز ۱۳)
+// ==============================================
+
+enum NotificationType {
+  COACH_REQUEST
+  COACH_REQUEST_RESPONSE
+  NEW_MESSAGE
+  PROGRAM_ASSIGNED
+  PROGRAM_UPDATED
+  MEMBERSHIP_EXPIRING
+  MEMBERSHIP_EXPIRED
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String           @db.VarChar(200)
+  body      String           @db.Text
+  data      Json?            // اطلاعات اضافی (مثلاً id مکالمه یا برنامه)
+  isRead    Boolean          @default(false) @map("is_read")
+  readAt    DateTime?        @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
 }

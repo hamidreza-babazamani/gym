@@ -17,6 +17,7 @@ import programRoutes from "./routes/program.routes";
 import groupRoutes from "./routes/group.routes";
 import fileRoutes from "./routes/file.routes";
 import chatRoutes from "./routes/chat.routes";
+import notificationRoutes from "./routes/notification.routes";
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/api/v1/programs", programRoutes);
 app.use("/api/v1/groups", groupRoutes);
 app.use("/api/v1/files", fileRoutes);
 app.use("/api/v1/chats", chatRoutes);
+app.use("/api/v1/notifications", notificationRoutes);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
