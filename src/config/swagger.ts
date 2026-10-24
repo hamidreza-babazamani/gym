@@ -1,40 +1,13 @@
-/**
- * تنظیمات Swagger برای مستندسازی API.
- * دلیل استفاده: ایجاد یک رابط کاربری تعاملی برای مشاهده و تست Endpointها.
- */
 import swaggerJsdoc from "swagger-jsdoc";
+import YAML from "yamljs";
+import path from "path";
+
+// بارگذاری فایل YAML
+const swaggerDocument = YAML.load(path.join(__dirname, "../../swagger.yaml"));
 
 const options: swaggerJsdoc.Options = {
-  definition: {
-    openapi: "3.0.0",
-    info: {
-      title: "Gym Backend API",
-      version: "1.0.0",
-      description: "مستندات APIهای پروژه بک‌اند باشگاه ورزشی",
-    },
-    servers: [
-      {
-        url: "http://localhost:5000",
-        description: "Development server",
-      },
-    ],
-    components: {
-      securitySchemes: {
-        bearerAuth: {
-          type: "http",
-          scheme: "bearer",
-          bearerFormat: "JWT",
-        },
-      },
-    },
-    security: [
-      {
-        bearerAuth: [],
-      },
-    ],
-  },
-  // مسیرهایی که باید برای پیدا کردن کامنت‌های Swagger جستجو شوند
-  apis: ["./src/routes/*.ts", "./src/controllers/*.ts"],
+  definition: swaggerDocument,
+  apis: [], // چون از فایل yaml استفاده می‌کنیم، نیازی به جستجوی کامنت‌ها در فایل‌های ts نیست
 };
 
 export const swaggerSpec = swaggerJsdoc(options);

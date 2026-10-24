@@ -18,6 +18,8 @@ import groupRoutes from "./routes/group.routes";
 import fileRoutes from "./routes/file.routes";
 import chatRoutes from "./routes/chat.routes";
 import notificationRoutes from "./routes/notification.routes";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger";
 
 const app = express();
 
@@ -26,6 +28,7 @@ app.use(helmet());
 app.use(cors(corsOptions));
 app.use(pinoHttp({ logger }));
 app.use(express.json({ limit: "10kb" }));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/v1/health", healthRoutes);
 app.use(globalLimiter);
 app.use("/api/v1/auth", authLimiter, authRoutes);
@@ -38,6 +41,7 @@ app.use("/api/v1/groups", groupRoutes);
 app.use("/api/v1/files", fileRoutes);
 app.use("/api/v1/chats", chatRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

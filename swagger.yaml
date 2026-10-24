@@ -1,0 +1,976 @@
+openapi: 3.0.0
+info:
+  title: Gym Backend API
+  version: 1.0.0
+  description: مستندات کامل API های پروژه بک‌اند باشگاه ورزشی
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ==================== Auth Schemas ====================
+    UserAuth:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string }
+        email: { type: string }
+        phone: { type: string, nullable: true }
+        roles: { type: array, items: { type: string } }
+
+    LoginResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: "ورود موفقیت‌آمیز بود." }
+        data:
+          type: object
+          properties:
+            user: { $ref: "#/components/schemas/UserAuth" }
+            accessToken: { type: string }
+            refreshToken: { type: string }
+
+    RegisterResponse:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        message: { type: string, example: "ثبت‌نام با موفقیت انجام شد." }
+        data:
+          type: object
+          properties:
+            userId: { type: string }
+
+    # ==================== Sport Schemas ====================
+    Sport:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        icon: { type: string, nullable: true }
+        isActive: { type: boolean }
+
+    SportsListResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            sports:
+              type: array
+              items: { $ref: "#/components/schemas/Sport" }
+
+    # ==================== Program Schemas ====================
+    Exercise:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        muscleGroup: { type: string, nullable: true }
+
+    ProgramExercise:
+      type: object
+      properties:
+        id: { type: string }
+        sets: { type: integer }
+        reps: { type: integer }
+        weight: { type: number, nullable: true }
+        restTime: { type: integer, nullable: true }
+        exercise: { $ref: "#/components/schemas/Exercise" }
+
+    ProgramDay:
+      type: object
+      properties:
+        id: { type: string }
+        dayOfWeek: { type: integer }
+        name: { type: string }
+        exercises:
+          type: array
+          items: { $ref: "#/components/schemas/ProgramExercise" }
+
+    Program:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        coachId: { type: string }
+        days:
+          type: array
+          items: { $ref: "#/components/schemas/ProgramDay" }
+
+    ProgramResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            program: { $ref: "#/components/schemas/Program" }
+
+    # ==================== Group Schemas ====================
+    Group:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        capacity: { type: integer }
+        isActive: { type: boolean }
+        _count:
+          type: object
+          properties:
+            members: { type: integer }
+
+    GroupsListResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            groups:
+              type: array
+              items: { $ref: "#/components/schemas/Group" }
+
+    # ==================== Chat Schemas ====================
+    ChatMember:
+      type: object
+      properties:
+        userId: { type: string }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+
+    MessagePreview:
+      type: object
+      properties:
+        id: { type: string }
+        content: { type: string }
+        sender:
+          type: object
+          properties:
+            fullName: { type: string }
+
+    Conversation:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [PRIVATE, GROUP] }
+        title: { type: string, nullable: true }
+        unreadCount: { type: integer }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/ChatMember" }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/MessagePreview" }
+
+    ConversationsListResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            conversations:
+              type: array
+              items: { $ref: "#/components/schemas/Conversation" }
+
+    Message:
+      type: object
+      properties:
+        id: { type: string }
+        content: { type: string, nullable: true }
+        sender:
+          type: object
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+        file:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            originalName: { type: string }
+            path: { type: string }
+            mimeType: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    MessagesListResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            messages:
+              type: array
+              items: { $ref: "#/components/schemas/Message" }
+            nextCursor: { type: string, nullable: true }
+
+    # ==================== Notification Schemas ====================
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string }
+        title: { type: string }
+        body: { type: string }
+        isRead: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        data: { type: object, nullable: true }
+
+    NotificationsListResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            notifications:
+              type: array
+              items: { $ref: "#/components/schemas/Notification" }
+
+    # ==================== File Schemas ====================
+    File:
+      type: object
+      properties:
+        id: { type: string }
+        originalName: { type: string }
+        storedName: { type: string }
+        mimeType: { type: string }
+        size: { type: integer }
+        type: { type: string, enum: [IMAGE, VIDEO, DOCUMENT] }
+        path: { type: string }
+        isPrivate: { type: boolean }
+
+    FilesListResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            files:
+              type: array
+              items: { $ref: "#/components/schemas/File" }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ==================== AUTH ====================
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: ثبت‌نام کاربر
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fullName, email, password]
+              properties:
+                fullName: { type: string }
+                email: { type: string }
+                phone: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        201:
+          description: ثبت‌نام موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegisterResponse" }
+        400:
+          description: خطای اعتبارسنجی
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: ورود کاربر
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        200:
+          description: ورود موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        401:
+          description: اطلاعات ورود اشتباه
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: دریافت پروفایل
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      user: { $ref: "#/components/schemas/UserAuth" }
+
+  /auth/profile:
+    patch:
+      tags: [Auth]
+      summary: ویرایش پروفایل
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName: { type: string }
+                phone: { type: string }
+      responses:
+        200: { description: موفق }
+
+  /auth/change-password:
+    patch:
+      tags: [Auth]
+      summary: تغییر رمز عبور
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 8 }
+      responses:
+        200: { description: موفق }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: فراموشی رمز
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+      responses:
+        200: { description: موفق }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: بازیابی رمز
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+                newPassword: { type: string }
+      responses:
+        200: { description: موفق }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: تازه‌سازی توکن
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        200: { description: موفق }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: خروج
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        200: { description: موفق }
+
+  # ==================== SPORTS ====================
+  /sports:
+    get:
+      tags: [Sports]
+      summary: لیست رشته‌ها
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SportsListResponse" }
+    post:
+      tags: [Sports]
+      summary: ساخت رشته (ادمین)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                icon: { type: string }
+      responses:
+        201: { description: ایجاد شد }
+
+  /sports/{id}:
+    get:
+      tags: [Sports]
+      summary: جزئیات رشته
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      sport: { $ref: "#/components/schemas/Sport" }
+    delete:
+      tags: [Sports]
+      summary: حذف رشته (ادمین)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: حذف شد }
+
+  # ==================== MEMBERSHIPS ====================
+  /memberships:
+    get:
+      tags: [Memberships]
+      summary: لیست عضویت‌ها
+      responses:
+        200: { description: موفق }
+    post:
+      tags: [Memberships]
+      summary: ایجاد عضویت (ادمین)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, sportId, startsAt, endsAt]
+              properties:
+                userId: { type: string }
+                sportId: { type: string }
+                startsAt: { type: string, format: date-time }
+                endsAt: { type: string, format: date-time }
+      responses:
+        201: { description: ایجاد شد }
+
+  /memberships/{id}/cancel:
+    patch:
+      tags: [Memberships]
+      summary: لغو عضویت (ادمین)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: لغو شد }
+
+  # ==================== COACH-STUDENT ====================
+  /coaches:
+    get:
+      tags: [Coach-Student]
+      summary: لیست مربیان (شاگرد)
+      responses:
+        200: { description: موفق }
+
+  /coaches/{coachId}/request:
+    post:
+      tags: [Coach-Student]
+      summary: درخواست به مربی (شاگرد)
+      parameters:
+        - { in: path, name: coachId, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sportId]
+              properties:
+                sportId: { type: string }
+      responses:
+        201: { description: ارسال شد }
+
+  /coach-requests/{requestId}:
+    patch:
+      tags: [Coach-Student]
+      summary: تأیید/رد درخواست (مربی)
+      parameters:
+        - {
+            in: path,
+            name: requestId,
+            required: true,
+            schema: { type: string },
+          }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+      responses:
+        200: { description: موفق }
+
+  /coach-requests/{requestId}/cancel:
+    patch:
+      tags: [Coach-Student]
+      summary: لغو درخواست (شاگرد)
+      parameters:
+        - {
+            in: path,
+            name: requestId,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        200: { description: لغو شد }
+
+  /coach-students/{id}/end:
+    patch:
+      tags: [Coach-Student]
+      summary: پایان ارتباط
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        200: { description: پایان یافت }
+
+  # ==================== PROGRAMS ====================
+  /programs/exercises:
+    post:
+      tags: [Programs]
+      summary: ساخت تمرین (مربی)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                muscleGroup: { type: string }
+      responses:
+        201: { description: ایجاد شد }
+
+  /programs:
+    post:
+      tags: [Programs]
+      summary: ساخت برنامه (مربی)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        201: { description: ایجاد شد }
+
+  /programs/{id}:
+    get:
+      tags: [Programs]
+      summary: مشاهده برنامه
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProgramResponse" }
+    patch:
+      tags: [Programs]
+      summary: ویرایش برنامه (مربی)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: موفق }
+    delete:
+      tags: [Programs]
+      summary: حذف برنامه (مربی)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: حذف شد }
+
+  /programs/{programId}/days:
+    post:
+      tags: [Programs]
+      summary: افزودن روز
+      parameters:
+        - {
+            in: path,
+            name: programId,
+            required: true,
+            schema: { type: string },
+          }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dayOfWeek, name]
+              properties:
+                dayOfWeek: { type: integer, minimum: 0, maximum: 6 }
+                name: { type: string }
+      responses:
+        201: { description: اضافه شد }
+
+  /programs/days/{dayId}/exercises:
+    post:
+      tags: [Programs]
+      summary: افزودن تمرین به روز
+      parameters:
+        - { in: path, name: dayId, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [exerciseId]
+              properties:
+                exerciseId: { type: string }
+                sets: { type: integer }
+                reps: { type: integer }
+                weight: { type: number }
+      responses:
+        201: { description: اضافه شد }
+
+  /programs/{programId}/assign:
+    post:
+      tags: [Programs]
+      summary: اختصاص به ورزشکار
+      parameters:
+        - {
+            in: path,
+            name: programId,
+            required: true,
+            schema: { type: string },
+          }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId]
+              properties:
+                studentId: { type: string }
+      responses:
+        201: { description: اختصاص یافت }
+
+  /programs/log:
+    post:
+      tags: [Programs]
+      summary: ثبت اجرای تمرین (شاگرد)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [programExerciseId, actualSets, actualReps]
+              properties:
+                programExerciseId: { type: string }
+                actualSets: { type: integer }
+                actualReps: { type: integer }
+                actualWeight: { type: number }
+      responses:
+        201: { description: ثبت شد }
+
+  # ==================== GROUPS ====================
+  /groups:
+    post:
+      tags: [Groups]
+      summary: ساخت گروه (مربی)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                capacity: { type: integer }
+      responses:
+        201: { description: ایجاد شد }
+    get:
+      tags: [Groups]
+      summary: لیست گروه‌ها
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupsListResponse" }
+
+  /groups/{id}:
+    get:
+      tags: [Groups]
+      summary: جزئیات گروه
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: موفق }
+    delete:
+      tags: [Groups]
+      summary: غیرفعال کردن گروه
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: موفق }
+
+  /groups/{id}/members:
+    post:
+      tags: [Groups]
+      summary: افزودن عضو
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string }
+      responses:
+        201: { description: اضافه شد }
+
+  /groups/{id}/assign-program:
+    post:
+      tags: [Groups]
+      summary: اختصاص برنامه به گروه
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [programId]
+              properties:
+                programId: { type: string }
+      responses:
+        201: { description: اختصاص یافت }
+
+  # ==================== FILES ====================
+  /files:
+    post:
+      tags: [Files]
+      summary: آپلود فایل
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        201:
+          description: آپلود شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      file: { $ref: "#/components/schemas/File" }
+    get:
+      tags: [Files]
+      summary: لیست فایل‌ها
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FilesListResponse" }
+
+  /files/{id}/download:
+    get:
+      tags: [Files]
+      summary: دانلود فایل
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200:
+          description: فایل دانلود شد
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+
+  /files/{id}:
+    delete:
+      tags: [Files]
+      summary: حذف فایل
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: حذف شد }
+
+  # ==================== CHAT ====================
+  /chats/private:
+    post:
+      tags: [Chat]
+      summary: مکالمه خصوصی
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipientId]
+              properties:
+                recipientId: { type: string }
+      responses:
+        201: { description: ایجاد شد }
+
+  /chats/group:
+    post:
+      tags: [Chat]
+      summary: گروه چت
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, memberIds]
+              properties:
+                title: { type: string }
+                memberIds: { type: array, items: { type: string } }
+      responses:
+        201: { description: ایجاد شد }
+
+  /chats:
+    get:
+      tags: [Chat]
+      summary: لیست مکالمات
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationsListResponse" }
+
+  /chats/{id}/messages:
+    get:
+      tags: [Chat]
+      summary: تاریخچه پیام‌ها
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: query, name: cursor, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, default: 50 } }
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MessagesListResponse" }
+
+  # ==================== NOTIFICATIONS ====================
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: لیست اعلان‌ها
+      parameters:
+        - { in: query, name: unreadOnly, schema: { type: boolean } }
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationsListResponse" }
+
+  /notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: تعداد خوانده‌نشده
+      responses:
+        200:
+          description: موفق
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      count: { type: integer }
+
+  /notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: خواندن همه
+      responses:
+        200: { description: موفق }
+
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: خواندن یکی
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        200: { description: موفق }
