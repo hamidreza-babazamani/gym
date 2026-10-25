@@ -22,6 +22,9 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerSpec } from "./config/swagger";
 import progressRoutes from "./routes/progress.routes";
 import paymentRoutes from "./routes/payment.routes";
+import aiRoutes from "./routes/ai.routes";
+import { aiLimiter } from "./config/rateLimit.config";
+
 
 const app = express();
 
@@ -45,6 +48,8 @@ app.use("/api/v1/chats", chatRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/progress", progressRoutes);
 app.use("/api/v1/payments", paymentRoutes);
+app.use("/api/v1/ai", aiRoutes);
+app.use("/api/v1/ai", aiLimiter, aiRoutes);
 
 
 app.use(notFoundMiddleware);

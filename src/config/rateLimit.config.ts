@@ -50,3 +50,14 @@ export const uploadLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+// محدودیت درخواست AI (برای جلوگیری از مصرف بی‌رویه)
+export const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // ۱ ساعت
+  max: 20, // حداکثر ۲۰ درخواست در ساعت
+  message: {
+    success: false,
+    message: "تعداد درخواست‌های شما به دستیار AI بیش از حد مجاز است.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

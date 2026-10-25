@@ -94,6 +94,7 @@ model User {
   updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt          DateTime?     @map("deleted_at") @db.Timestamptz(3)
   
+  aiConversations AIConversation[]
   roles              UserRole[]
   sessions           Session[]
   passwordResets     PasswordResetToken[]
@@ -683,4 +684,20 @@ model Payment {
   @@index([orderId])
   @@index([status])
   @@map("payments")
+}
+// ==============================================
+// AIConversation (مکالمات هوش مصنوعی - فاز ۱۶)
+// ==============================================
+
+model AIConversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String   @db.VarChar(20) // "user" یا "assistant"
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("ai_conversations")
 }
