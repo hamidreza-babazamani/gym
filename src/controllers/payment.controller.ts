@@ -87,7 +87,7 @@ export const initiatePayment = asyncHandler(async (req: AuthenticatedRequest, re
   return sendSuccess(res, "به درگاه پرداخت هدایت شوید.", { paymentUrl, authority });
 });
 
-// تأیید پرداخت و فعال‌سازی/تمدید اشتراک
+// تأیید پرداخت و فعال‌سازی/تمدید اشتراک (با عملیات اتمیک برای جلوگیری از Race Condition)
 export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { authority, status } = req.body;
   const userId = req.user!.id;
@@ -99,14 +99,15 @@ export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res:
   
   if (!payment) throw new ApiError(404, "تراکنش پیدا نشد.");
   if (payment.order.userId !== userId) throw new ApiError(403, "این تراکنش متعلق به شما نیست.");
-  if (payment.status !== "PENDING") throw new ApiError(400, "این تراکنش قبلاً پردازش شده است.");
-  if (payment.order.status !== "PENDING") throw new ApiError(400, "این سفارش قبلاً پرداخت شده است.");
 
   if (status === "OK") {
     await prisma.$transaction(async (tx) => {
-      // ۱. آپدیت تراکنش به موفق
-      await tx.payment.update({
-        where: { id: payment.id },
+      // ۱. آپدیت اتمیک تراکنش (فقط اگر PENDING باشد)
+      const updatedPayment = await tx.payment.updateMany({
+        where: { 
+          id: payment.id, 
+          status: "PENDING"  // ← شرط حیاتی
+        },
         data: { 
           status: "SUCCESS", 
           refId: `REF-${crypto.randomBytes(8).toString("hex")}`,
@@ -114,15 +115,29 @@ export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res:
         },
       });
 
-      // ۲. آپدیت سفارش به پرداخت‌شده
-      await tx.order.update({ where: { id: payment.orderId }, data: { status: "PAID" } });
+      // اگر count = 0 باشد، یعنی درخواست دیگری زودتر اون رو آپدیت کرده
+      if (updatedPayment.count === 0) {
+        throw new ApiError(400, "این تراکنش قبلاً پردازش شده است.");
+      }
+
+      // ۲. آپدیت اتمیک سفارش (فقط اگر PENDING باشد)
+      const updatedOrder = await tx.order.updateMany({
+        where: { 
+          id: payment.orderId, 
+          status: "PENDING" 
+        },
+        data: { status: "PAID" },
+      });
+
+      if (updatedOrder.count === 0) {
+        throw new ApiError(400, "این سفارش قبلاً پرداخت شده است.");
+      }
 
       // ۳. فعال‌سازی یا تمدید عضویت
       const firstSport = await tx.sport.findFirst({ where: { isActive: true } });
       if (firstSport) {
         const now = new Date();
         
-        // بررسی همه عضویت‌های قبلی (فعال، لغو شده یا منقضی)
         const existingMembership = await tx.membership.findFirst({
           where: { 
             userId: payment.order.userId, 
@@ -133,10 +148,9 @@ export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res:
         });
 
         if (existingMembership) {
-          // اگر عضویت قبلی وجود داره (فعال، لغو شده یا منقضی)، اون رو به‌روزرسانی کن
           let newEndsAt = new Date();
           if (existingMembership.status === "ACTIVE" && existingMembership.endsAt > now) {
-            newEndsAt = new Date(existingMembership.endsAt); // از تاریخ پایان فعلی تمدید کن
+            newEndsAt = new Date(existingMembership.endsAt);
           }
           newEndsAt.setDate(newEndsAt.getDate() + payment.order.durationDays);
 
@@ -149,7 +163,6 @@ export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res:
             },
           });
         } else {
-          // اگر هیچ عضویتی وجود نداره، عضویت جدید بساز
           const endsAt = new Date(now);
           endsAt.setDate(endsAt.getDate() + payment.order.durationDays);
           await tx.membership.create({
@@ -161,10 +174,21 @@ export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res:
 
     return sendSuccess(res, "پرداخت با موفقیت انجام شد و اشتراک فعال/تمدید شد.");
   } else {
-    // پرداخت ناموفق
+    // پرداخت ناموفق (با عملیات اتمیک)
     await prisma.$transaction(async (tx) => {
-      await tx.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
-      await tx.order.update({ where: { id: payment.orderId }, data: { status: "FAILED" } });
+      const updatedPayment = await tx.payment.updateMany({
+        where: { id: payment.id, status: "PENDING" },
+        data: { status: "FAILED" },
+      });
+
+      if (updatedPayment.count === 0) {
+        throw new ApiError(400, "این تراکنش قبلاً پردازش شده است.");
+      }
+
+      await tx.order.updateMany({
+        where: { id: payment.orderId, status: "PENDING" },
+        data: { status: "FAILED" },
+      });
     });
     throw new ApiError(400, "پرداخت ناموفق بود.");
   }
