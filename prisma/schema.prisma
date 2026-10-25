@@ -650,7 +650,8 @@ model Order {
   id         String      @id @default(uuid()) @db.Uuid
   userId     String      @map("user_id") @db.Uuid
   planId     String      @map("plan_id") @db.Uuid
-  amount     Int         // مبلغ نهایی
+  amount     Int
+  durationDays Int       @map("duration_days") // ← فیلد جدید
   status     OrderStatus @default(PENDING)
   idempotencyKey String? @unique @map("idempotency_key") @db.VarChar(100)
   createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
