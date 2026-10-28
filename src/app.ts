@@ -31,6 +31,7 @@ app.use(helmet());
 app.use(cors(corsOptions));
 app.use(pinoHttp({ logger }));
 app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true })); // N-02 fix: Parse HTML form submissions
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/v1/health", healthRoutes);
 app.use(globalLimiter);

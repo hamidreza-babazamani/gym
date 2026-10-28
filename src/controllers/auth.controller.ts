@@ -258,11 +258,22 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 
   const hashedToken = hashToken(refreshToken);
 
+  // F-05 fix: Find session to get userId before revoking
+  const session = await prisma.session.findFirst({
+    where: { refreshTokenHash: hashedToken, revokedAt: null },
+    select: { userId: true },
+  });
+
   await prisma.session.updateMany({
     where: { refreshTokenHash: hashedToken, revokedAt: null },
     data: { revokedAt: new Date() },
   });
-    //disconnectUser(req.user!.id); // F-09 fix: kill active sockets on logout
+
+  // F-05 fix: Disconnect active sockets for this user
+  if (session?.userId) {
+    disconnectUser(session.userId);
+  }
+
   return sendSuccess(res, "خروج با موفقیت انجام شد.");
 });
 

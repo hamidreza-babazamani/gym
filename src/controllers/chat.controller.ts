@@ -54,11 +54,46 @@ export const createPrivateConversation = asyncHandler(async (req: AuthenticatedR
 export const createGroupConversation = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { title, memberIds } = req.body;
   const userId = req.user!.id;
+  const userRoles = req.user!.roles || [];
 
   const allMemberIds = Array.from(new Set([...memberIds, userId]));
 
   const users = await prisma.user.findMany({ where: { id: { in: allMemberIds } } });
   if (users.length !== allMemberIds.length) throw new ApiError(404, "یکی از کاربران پیدا نشد.");
+
+  // N-03 fix: Check relationships for non-admin users
+  const isAdmin = userRoles.includes("ADMIN") || userRoles.includes("SUPER_ADMIN");
+  if (!isAdmin) {
+    const otherMemberIds = allMemberIds.filter(id => id !== userId);
+    
+    // Check if each other member has an active coach-student relationship with the creator
+    const validRelationships = await prisma.coachStudent.count({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { coachId: userId, studentId: { in: otherMemberIds } },
+          { studentId: userId, coachId: { in: otherMemberIds } },
+        ],
+      },
+    });
+
+    // We don't check exact count because one person could have multiple relationships
+    // Simple check: if any member is not connected, block the request
+    for (const otherId of otherMemberIds) {
+      const isConnected = await prisma.coachStudent.findFirst({
+        where: {
+          status: "ACTIVE",
+          OR: [
+            { coachId: userId, studentId: otherId },
+            { studentId: userId, coachId: otherId },
+          ],
+        },
+      });
+      if (!isConnected) {
+        throw new ApiError(403, "شما فقط می‌توانید با افرادی که ارتباط فعال دارید گروه بسازید.");
+      }
+    }
+  }
 
   const conversation = await prisma.conversation.create({
     data: {

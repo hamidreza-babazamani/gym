@@ -68,8 +68,18 @@ export const updateProgram = asyncHandler(async (req: AuthenticatedRequest, res:
 export const deleteProgram = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const coachId = req.user!.id;
+
   const program = await prisma.program.findFirst({ where: { id, coachId } });
   if (!program) throw new ApiError(404, "برنامه پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  // F-02 / N-01 fix: Prevent cascade delete if logs exist
+  const logCount = await prisma.exerciseLog.count({
+    where: { programExercise: { day: { programId: id } } },
+  });
+  if (logCount > 0) {
+    throw new ApiError(400, "امکان حذف این برنامه وجود ندارد. ورزشکاران از این برنامه تمرین ثبت کرده‌اند.");
+  }
+
   await prisma.program.delete({ where: { id } });
   return sendSuccess(res, "برنامه و تمام محتویات آن با موفقیت حذف شد.");
 });
@@ -102,8 +112,18 @@ export const updateProgramDay = asyncHandler(async (req: AuthenticatedRequest, r
 export const deleteProgramDay = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const coachId = req.user!.id;
+
   const day = await prisma.programDay.findFirst({ where: { id, program: { coachId } } });
   if (!day) throw new ApiError(404, "روز تمرینی پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  // F-02 / N-01 fix: Prevent cascade delete if logs exist
+  const logCount = await prisma.exerciseLog.count({
+    where: { programExercise: { dayId: id } },
+  });
+  if (logCount > 0) {
+    throw new ApiError(400, "امکان حذف این روز وجود ندارد. برای تمرین‌های این روز لاگ ثبت شده است.");
+  }
+
   await prisma.programDay.delete({ where: { id } });
   return sendSuccess(res, "روز تمرینی و تمرین‌های آن با موفقیت حذف شد.");
 });
@@ -146,10 +166,20 @@ export const updateProgramExercise = asyncHandler(async (req: AuthenticatedReque
 export const deleteProgramExercise = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const id = String(req.params.id);
   const coachId = req.user!.id;
+
   const programExercise = await prisma.programExercise.findFirst({
     where: { id, day: { program: { coachId } } }, include: { day: true },
   });
   if (!programExercise) throw new ApiError(404, "تمرین پیدا نشد یا شما اجازه دسترسی ندارید.");
+
+  // F-02 / N-01 fix: Prevent cascade delete if logs exist
+  const logCount = await prisma.exerciseLog.count({
+    where: { programExerciseId: id },
+  });
+  if (logCount > 0) {
+    throw new ApiError(400, "امکان حذف این تمرین وجود ندارد. برای این تمرین لاگ ثبت شده است.");
+  }
+
   await createProgramSnapshot(programExercise.day.programId);
   await prisma.programExercise.delete({ where: { id } });
   return sendSuccess(res, "تمرین با موفقیت از برنامه حذف شد.");
