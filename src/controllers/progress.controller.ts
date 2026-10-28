@@ -167,7 +167,13 @@ export const compareProgress = asyncHandler(async (req: AuthenticatedRequest, re
 
   // بررسی اینکه تاریخ شروع از تاریخ پایان بزرگ‌تر نباشد
   const fromDate = new Date(String(from));
-  const toDate = new Date(String(to));
+  let toDate = new Date(String(to));
+  
+  // MVP-05 fix: If 'to' is date-only, extend to end of day
+  if (typeof to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    toDate.setUTCHours(23, 59, 59, 999);
+  }
+
   if (fromDate > toDate) {
     throw new ApiError(400, "تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.");
   }
@@ -179,7 +185,7 @@ export const compareProgress = asyncHandler(async (req: AuthenticatedRequest, re
     if (!hasAccess) throw new ApiError(403, "شما به این اطلاعات دسترسی ندارید.");
   }
 
-    const startLog = await prisma.progressLog.findFirst({
+  const startLog = await prisma.progressLog.findFirst({
     where: { userId, recordedAt: { gte: fromDate, lte: toDate } },
     orderBy: { recordedAt: "asc" },
   });

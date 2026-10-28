@@ -84,11 +84,12 @@ export const respondToCoachRequest = asyncHandler(async (req: AuthenticatedReque
   if (!request) throw new ApiError(404, "درخواست پیدا نشد یا قبلاً بررسی شده است.");
 
   // F-06 fix: Atomic update to prevent race conditions
+  // MVP-03 fix: Clear leftAt when reactivating a relationship
   const updatedRequest = await prisma.coachStudent.updateMany({
     where: { id: request.id, status: "PENDING" },
     data: {
       status: decision === "APPROVE" ? "ACTIVE" : "REJECTED",
-      ...(decision === "APPROVE" ? { startedAt: new Date() } : {}),
+      ...(decision === "APPROVE" ? { startedAt: new Date(), leftAt: null, endedAt: null } : {}),
     },
   });
 

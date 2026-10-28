@@ -315,26 +315,33 @@ export const revertProgramToVersion = asyncHandler(async (req: AuthenticatedRequ
 
   // ۲. کل عملیات بازگردانی رو داخل یه تراکنش اتمیک انجام می‌دیم
   await prisma.$transaction(async (tx) => {
-    // به جای پاک کردن کل روزها (که باعث پاک شدن لاگ‌ها میشه)،
-    // فقط ارتباط حرکات فعلی رو قطع می‌کنیم یا روزها رو آپدیت می‌کنیم.
-    // ساده‌ترین راه برای حفظ لاگ‌ها: روزها رو پاک نکنیم، بلکه حرکاتشون رو آپدیت کنیم.
-    
-    // برای سادگی و امنیت، تمام روزهای فعلی رو پیدا می‌کنیم
+    // تمام روزهای فعلی رو پیدا می‌کنیم
     const existingDays = await tx.programDay.findMany({ 
       where: { programId },
-      include: { exercises: true } 
+      include: { exercises: { include: { logs: true } } } 
     });
 
-    // برای هر روزی که توی اسنپ‌شات هست:
+    // ۳. روزهایی که توی اسنپ‌شات نیستن رو پاک می‌کنیم (اگه لاگ ندارن)
+    for (const dbDay of existingDays) {
+      const isInSnapshot = snapshot.days.some((d: any) => d.dayOfWeek === dbDay.dayOfWeek);
+      if (!isInSnapshot) {
+        // بررسی کن اگه هیچ حرکتی لاگ نداره، کل روز رو پاک کن
+        const hasLogs = dbDay.exercises.some(pe => pe.logs.length > 0);
+        if (!hasLogs) {
+          await tx.programDay.delete({ where: { id: dbDay.id } });
+        }
+      }
+    }
+
+    // ۴. برای هر روزی که توی اسنپ‌شات هست:
     for (const day of snapshot.days) {
-      // آیا این روز از قبل وجود داره؟ (بر اساس dayOfWeek)
       let dbDay = existingDays.find(d => d.dayOfWeek === day.dayOfWeek);
 
       if (!dbDay) {
         // اگه روز جدید بود، می‌سازیمش
         dbDay = await tx.programDay.create({ 
           data: { programId, dayOfWeek: day.dayOfWeek, name: day.name },
-          include: { exercises: true }
+          include: { exercises: { include: { logs: true } } }
         });
       } else {
         // اگه از قبل بود، اسمش رو آپدیت می‌کنیم
@@ -344,38 +351,53 @@ export const revertProgramToVersion = asyncHandler(async (req: AuthenticatedRequ
         });
       }
 
-      // حالا حرکات این روز رو بازسازی می‌کنیم
-      // نکته مهم: حرکات قدیمی رو پاک نمی‌کنیم تا لاگ‌هاشون بمونه، 
-      // بلکه فقط حرکات جدید رو اضافه می‌کنیم و بقیه رو آپدیت می‌کنیم.
-      // (برای MVP، ساده‌ترین راه اینه که حرکاتِ این روز رو پاک کنیم و از نو بسازیم،
-      // ولی چون ExerciseLog به ProgramExercise وصله، بازم لاگ پاک میشه. 
-      // پس بهترین راه اینه که حرکات رو با createMany اضافه کنیم و به قدیمی‌ها دست نزنیم،
-      // یا اگه قراره جایگزین بشن، اول لاگ‌ها رو detach کنیم که این پیچیده‌ست).
-      
-      // راه‌حل نهایی برای حفظ لاگ‌ها:
-      // به جای حذف ProgramExercise های قدیمی، فقط اونایی رو که توی اسنپ‌شات جدید نیستن رو غیرفعال (soft-delete) نمی‌کنیم،
-      // بلکه چون ساختار دیتابیس کاسکید داره، ما اصلاً ProgramDay رو پاک نمی‌کنیم.
-      // برای حرکات، ما فقط حرکات جدید رو اضافه می‌کنیم. (این ممکنه باعث بشه حرکات تکراری داشته باشیم، 
-      // ولی برای MVP و حفظ لاگ‌ها، این امن‌ترین راهه).
+      // ۵. حرکات این روز رو با اسنپ‌شات هماهنگ می‌کنیم
+      // اول حرکاتِ فعلی این روز رو پیدا می‌کنیم (اگه روز جدید باشه، لیست خالیه)
+      const currentExercises = dbDay.exercises || [];
+      const snapshotExerciseIds = day.exercises.map((pe: any) => pe.exerciseId);
 
-      // بیایم حرکات این روز رو یک‌جا بسازیم:
-      const exercisesToCreate = day.exercises.map((pe: any) => ({
-        dayId: dbDay.id,
-        exerciseId: pe.exerciseId,
-        sets: pe.sets,
-        reps: pe.reps,
-        weight: pe.weight,
-        restTime: pe.restTime,
-        order: pe.order,
-      }));
+      // ۵.۱. حرکاتی که توی برنامه هستن ولی توی اسنپ‌شات نیستن رو پاک می‌کنیم (اگه لاگ ندارن)
+      for (const dbEx of currentExercises) {
+        if (!snapshotExerciseIds.includes(dbEx.exerciseId)) {
+          if (dbEx.logs.length === 0) {
+            await tx.programExercise.delete({ where: { id: dbEx.id } });
+          }
+        }
+      }
 
-      if (exercisesToCreate.length > 0) {
-        await tx.programExercise.createMany({
-          data: exercisesToCreate,
-        });
+      // ۵.۲. حرکاتِ اسنپ‌شات رو اضافه یا آپدیت می‌کنیم
+      for (const pe of day.exercises) {
+        const existingEx = currentExercises.find((e: any) => e.exerciseId === pe.exerciseId);
+        
+        if (existingEx) {
+          // اگه وجود داره، آپدیتش می‌کنیم (فقط اگه لاگ نداشته باشه یا لاگش دست نخوره)
+          await tx.programExercise.update({
+            where: { id: existingEx.id },
+            data: {
+              sets: pe.sets,
+              reps: pe.reps,
+              weight: pe.weight,
+              restTime: pe.restTime,
+              order: pe.order,
+            },
+          });
+        } else {
+          // اگه وجود نداره، اضافه‌ش می‌کنیم
+          await tx.programExercise.create({
+            data: {
+              dayId: dbDay.id,
+              exerciseId: pe.exerciseId,
+              sets: pe.sets,
+              reps: pe.reps,
+              weight: pe.weight,
+              restTime: pe.restTime,
+              order: pe.order,
+            },
+          });
+        }
       }
     }
   });
 
   return sendSuccess(res, "برنامه با موفقیت به نسخه قبلی بازگردانده شد.");
-});;
+});

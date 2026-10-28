@@ -72,11 +72,41 @@ export const downloadFile = asyncHandler(async (req: AuthenticatedRequest, res: 
   const id = String(req.params.id);
   const userId = req.user!.id;
 
-  const file = await prisma.file.findUnique({ where: { id } });
+  const file = await prisma.file.findUnique({ 
+    where: { id },
+    include: {
+      messages: {
+        include: {
+          conversation: {
+            include: {
+              members: true
+            }
+          }
+        }
+      }
+    }
+  });
+  
   if (!file) throw new ApiError(404, "فایل پیدا نشد.");
 
   const isAdmin = req.user!.roles.includes("ADMIN") || req.user!.roles.includes("SUPER_ADMIN");
-  if (file.isPrivate && file.ownerId !== userId && !isAdmin) {
+  let hasAccess = file.ownerId === userId || !file.isPrivate || isAdmin;
+
+  // MVP-04 fix: Allow conversation members to download attachments
+  if (!hasAccess && file.messages.length > 0) {
+    // Check if user is a member of any conversation containing this file
+    for (const msg of file.messages) {
+      const isMember = msg.conversation.members.some(
+        (m) => m.userId === userId && m.leftAt === null
+      );
+      if (isMember) {
+        hasAccess = true;
+        break;
+      }
+    }
+  }
+
+  if (!hasAccess) {
     throw new ApiError(403, "شما اجازه دسترسی به این فایل را ندارید.");
   }
 
