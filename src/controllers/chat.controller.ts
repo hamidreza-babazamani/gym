@@ -77,6 +77,7 @@ export const listConversations = asyncHandler(async (req: AuthenticatedRequest, 
 
   const conversations = await prisma.conversation.findMany({
     where: { members: { some: { userId, leftAt: null } } },
+    take: 50, // F-18: Add basic pagination to prevent unbounded query
     include: {
       members: {
         where: { leftAt: null },

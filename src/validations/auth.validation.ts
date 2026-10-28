@@ -59,3 +59,8 @@ export const verifyPhoneSchema = z.object({
     token: z.string().min(1, "توکن الزامی است."),
   }),
 });
+export const requestPhoneVerificationSchema = z.object({
+  body: z.object({
+    phone: z.string().regex(/^\+?[\d\s()-]{7,20}$/, "فرمت شماره موبایل معتبر نیست."),
+  }),
+});

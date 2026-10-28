@@ -220,9 +220,9 @@ model CoachStudent {
   id              String                @id @default(uuid()) @db.Uuid
   coachId         String                @map("coach_id") @db.Uuid
   studentId       String                @map("student_id") @db.Uuid
-  sportId         String                @map("sport_id") @db.Uuid
+  sportId         String                @map("sport_id") @db.Uuid // (بدون تغییر)
   status          CoachStudentStatus    @default(PENDING)
-  initiatedBy     CoachStudentInitiator @map("initiated_by")
+  initiatedBy     CoachStudentInitiator @default(STUDENT) @map("initiated_by") // ← مقدار پیش‌فرض اضافه شد
   
   startedAt       DateTime?             @map("started_at") @db.Timestamptz(3)
   endedAt         DateTime?             @map("ended_at") @db.Timestamptz(3)
@@ -653,9 +653,9 @@ model Order {
   userId     String      @map("user_id") @db.Uuid
   planId     String      @map("plan_id") @db.Uuid
   amount     Int
-  durationDays Int       @map("duration_days") // ← فیلد جدید
+  durationDays Int       @default(30) @map("duration_days")
   status     OrderStatus @default(PENDING)
-  idempotencyKey String? @unique @map("idempotency_key") @db.VarChar(100)
+  idempotencyKey String? @map("idempotency_key") @db.VarChar(100)
   createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -663,8 +663,8 @@ model Order {
   plan     SubscriptionPlan @relation(fields: [planId], references: [id])
   payments Payment[]
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, status])
-  @@index([idempotencyKey])
   @@map("orders")
 }
 

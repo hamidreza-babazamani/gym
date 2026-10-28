@@ -8,6 +8,7 @@ import { sendSuccess } from "../utils/api-response";
 import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { createAuditLog } from "../utils/audit";
+import { disconnectUser } from "../config/socket";
 
 // تابع کمکی برای اعتبارسنجی تاریخ
 const parseDate = (value: unknown, fieldName: string): Date | undefined => {
@@ -118,6 +119,11 @@ export const updateUserStatus = asyncHandler(async (req: Request, res: Response)
     where: { id: userId },
     data: { status, ...(status === "DELETED" ? { deletedAt: new Date() } : {}) },
   });
+
+  // F-09 fix: Force disconnect sockets if user is no longer active
+  if (status !== "ACTIVE") {
+    disconnectUser(userId);
+  }
 
   await createAuditLog({
     actorId, action: "USER_STATUS_CHANGED", entity: "User", entityId: userId,

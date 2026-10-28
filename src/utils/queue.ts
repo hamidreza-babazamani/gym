@@ -12,7 +12,7 @@ type Job = {
   maxAttempts: number;
   handler: (payload: any) => Promise<void>;
 };
-
+// F-17: In-memory queue is not durable. For production, replace with Redis/BullMQ.
 class InMemoryQueue {
   private jobs: Job[] = [];
   private processing = false;

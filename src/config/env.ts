@@ -11,11 +11,13 @@ dotenv.config();
 
 // تعریف ساختار مورد انتظار از فایل .env
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  // در صورت فراموشی تنظیم NODE_ENV، امن‌ترین حالت (production) انتخاب می‌شود
+  NODE_ENV: z.enum(["development", "production", "test"]).default("production"),
   PORT: z.string().default("5000").transform((val) => Number(val)),
   DATABASE_URL: z.string().url("آدرس دیتابیس (DATABASE_URL) معتبر نیست."),
   JWT_SECRET: z.string().min(10, "کلید JWT_SECRET باید حداقل ۱۰ کاراکتر باشد."),
   JWT_EXPIRES_IN: z.string().default("15m"),
+  MOCK_PAYMENT_ENABLED: z.string().default("false").transform((val) => val === "true"),
 });
 
 // اعتبارسنجی
@@ -27,5 +29,26 @@ if (!parsedEnv.success) {
   process.exit(1); // خروج اجباری برنامه
 }
 
-// خروجی نهایی و تایپ‌شده
-export const env = parsedEnv.data;
+const env = parsedEnv.data;
+
+// چک‌های اضافی مخصوص محیط production
+if (env.NODE_ENV === "production") {
+  const errors: string[] = [];
+
+  if (env.JWT_SECRET.length < 32) {
+    errors.push("در production، JWT_SECRET باید حداقل ۳۲ کاراکتر باشد.");
+  }
+
+  // جلوگیری از سکرت‌های ضعیف مثل "aaaaaaaaaaaaaaaaaaaa"
+  if (/^(.)\1+$/.test(env.JWT_SECRET)) {
+    errors.push("JWT_SECRET نباید از تکرار یک کاراکتر تشکیل شده باشد.");
+  }
+
+  if (errors.length > 0) {
+    console.error("خطا در تنظیمات production:");
+    errors.forEach((e) => console.error(`  - ${e}`));
+    process.exit(1);
+  }
+}
+
+export { env };

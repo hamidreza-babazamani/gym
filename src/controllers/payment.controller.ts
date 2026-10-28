@@ -10,6 +10,7 @@ import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { expireOldMemberships } from "../utils/membership.utils";
+import { env } from "../config/env";
 
 const generateAuthority = () => `MOCK-${crypto.randomBytes(16).toString("hex")}`;
 
@@ -42,8 +43,13 @@ export const createOrder = asyncHandler(async (req: AuthenticatedRequest, res: R
   const plan = await prisma.subscriptionPlan.findFirst({ where: { id: planId, isActive: true } });
   if (!plan) throw new ApiError(404, "پلن پیدا نشد یا غیرفعال است.");
 
-  if (idempotencyKey) {
-    const existing = await prisma.order.findUnique({ where: { idempotencyKey } });
+    if (idempotencyKey) {
+    // F-10 fix: idempotency key scoped to user
+    const existing = await prisma.order.findUnique({
+      where: {
+        userId_idempotencyKey: { userId, idempotencyKey},
+      },
+    });
     if (existing) return sendSuccess(res, "سفارش قبلاً ایجاد شده است.", { order: existing });
   }
 
@@ -91,7 +97,10 @@ export const initiatePayment = asyncHandler(async (req: AuthenticatedRequest, re
 export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { authority, status } = req.body;
   const userId = req.user!.id;
-
+    // F-01 fix: mock payment فقط در dev
+  if (!env.MOCK_PAYMENT_ENABLED) {
+    throw new ApiError(503, "درگاه پرداخت در حال حاضر در دسترس نیست.");
+  }
   const payment = await prisma.payment.findUnique({
     where: { authority },
     include: { order: true },
@@ -133,46 +142,50 @@ export const verifyPayment = asyncHandler(async (req: AuthenticatedRequest, res:
         throw new ApiError(400, "این سفارش قبلاً پرداخت شده است.");
       }
 
-      // ۳. فعال‌سازی یا تمدید عضویت
+            // ۳. فعال‌سازی یا تمدید عضویت
+      // F-11 fix: اگه هیچ sport فعالی نباشه، تراکنش fail می‌شه
       const firstSport = await tx.sport.findFirst({ where: { isActive: true } });
-      if (firstSport) {
-        const now = new Date();
-        
-        const existingMembership = await tx.membership.findFirst({
-          where: { 
-            userId: payment.order.userId, 
-            sportId: firstSport.id,
-            status: { in: ["ACTIVE", "CANCELLED", "EXPIRED"] }
-          },
-          orderBy: { createdAt: "desc" }
-        });
-
-        if (existingMembership) {
-          let newEndsAt = new Date();
-          if (existingMembership.status === "ACTIVE" && existingMembership.endsAt > now) {
-            newEndsAt = new Date(existingMembership.endsAt);
-          }
-          newEndsAt.setDate(newEndsAt.getDate() + payment.order.durationDays);
-
-          await tx.membership.update({
-            where: { id: existingMembership.id },
-            data: { 
-              status: "ACTIVE", 
-              startsAt: existingMembership.status === "ACTIVE" ? existingMembership.startsAt : now,
-              endsAt: newEndsAt 
-            },
-          });
-        } else {
-          const endsAt = new Date(now);
-          endsAt.setDate(endsAt.getDate() + payment.order.durationDays);
-          await tx.membership.create({
-            data: { userId: payment.order.userId, sportId: firstSport.id, startsAt: now, endsAt, status: "ACTIVE" },
-          });
-        }
+      if (!firstSport) {
+        throw new ApiError(500, "هیچ ورزش فعالی برای فعال‌سازی عضویت وجود ندارد.");
       }
-    });
+
+      const now = new Date();
+      
+      const existingMembership = await tx.membership.findFirst({
+        where: { 
+          userId: payment.order.userId, 
+          sportId: firstSport.id,
+          status: { in: ["ACTIVE", "CANCELLED", "EXPIRED"] }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+
+      if (existingMembership) {
+        let newEndsAt = new Date();
+        if (existingMembership.status === "ACTIVE" && existingMembership.endsAt > now) {
+          newEndsAt = new Date(existingMembership.endsAt);
+        }
+        newEndsAt.setDate(newEndsAt.getDate() + payment.order.durationDays);
+
+        await tx.membership.update({
+          where: { id: existingMembership.id },
+          data: { 
+            status: "ACTIVE", 
+            startsAt: existingMembership.status === "ACTIVE" ? existingMembership.startsAt : now,
+            endsAt: newEndsAt 
+          },
+        });
+      } else {
+        const endsAt = new Date(now);
+        endsAt.setDate(endsAt.getDate() + payment.order.durationDays);
+        await tx.membership.create({
+          data: { userId: payment.order.userId, sportId: firstSport.id, startsAt: now, endsAt, status: "ACTIVE" },
+        });
+      }
+    }); // 👈 این خط مربوط به بسته شدن prisma.$transaction هست
 
     return sendSuccess(res, "پرداخت با موفقیت انجام شد و اشتراک فعال/تمدید شد.");
+    //return sendSuccess(res, "پرداخت با موفقیت انجام شد و اشتراک فعال/تمدید شد.");
   } else {
     // پرداخت ناموفق (با عملیات اتمیک)
     await prisma.$transaction(async (tx) => {

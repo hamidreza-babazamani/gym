@@ -262,3 +262,9 @@ export const getIO = () => {
   if (!io) throw new Error("Socket.IO not initialized");
   return io;
 };
+// F-09 fix: Force disconnect user's active sockets on suspend/logout
+export const disconnectUser = (userId: string) => {
+  if (!io) return;
+  io.in(`user:${userId}`).disconnectSockets(true);
+  logger.info(`User ${userId} disconnected due to status change or logout.`);
+};

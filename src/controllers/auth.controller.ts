@@ -11,6 +11,7 @@ import { ApiError } from "../utils/ApiError";
 import { asyncHandler } from "../utils/asyncHandler";
 import { generateAccessToken, generateRefreshToken, hashToken } from "../utils/token.utils";
 import { env } from "../config/env";
+import { disconnectUser } from "../config/socket";
 
 // تابع کمکی برای ایجاد نشست جدید (ثبت در دیتابیس)
 const createSession = async (userId: string, req: Request) => {
@@ -102,7 +103,6 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(401, "اطلاعات ورود صحیح نیست.");
   }
 
-  // بررسی قفل بودن حساب
   if (user.lockedUntil && user.lockedUntil > new Date()) {
     const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
     throw new ApiError(429, `حساب کاربری شما به دلیل تلاش‌های ناموفق قفل شده است. لطفاً ${remainingMinutes} دقیقه دیگر تلاش کنید.`);
@@ -111,24 +111,25 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
   if (!isPasswordValid) {
-    const newFailedCount = user.failedLoginCount + 1;
+    // F-13 fix: Atomic increment to prevent concurrent bypass
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { failedLoginCount: { increment: 1 } },
+      select: { failedLoginCount: true },
+    });
+
     const lockDuration = 15 * 60 * 1000;
 
-    const updateData: any = { failedLoginCount: newFailedCount };
-
-    if (newFailedCount >= 5) {
-      updateData.lockedUntil = new Date(Date.now() + lockDuration);
+    if (updatedUser.failedLoginCount >= 5) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lockedUntil: new Date(Date.now() + lockDuration) },
+      });
     }
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: updateData,
-    });
 
     throw new ApiError(401, "اطلاعات ورود صحیح نیست.");
   }
 
-  // بررسی وضعیت حساب
   if (user.status === "PENDING_VERIFICATION") {
     throw new ApiError(403, "لطفاً ابتدا ایمیل خود را تأیید کنید.");
   }
@@ -261,7 +262,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     where: { refreshTokenHash: hashedToken, revokedAt: null },
     data: { revokedAt: new Date() },
   });
-
+    //disconnectUser(req.user!.id); // F-09 fix: kill active sockets on logout
   return sendSuccess(res, "خروج با موفقیت انجام شد.");
 });
 
@@ -470,6 +471,7 @@ export const resendVerificationEmail = asyncHandler(async (req: Request, res: Re
 
   return sendSuccess(res, "اگر این ایمیل در سیستم باشد، لینک تأیید ارسال خواهد شد.");
 });
+
 // تغییر ایمیل (نیاز به تأیید مجدد)
 export const changeEmail = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.id;
@@ -528,38 +530,38 @@ export const changeEmail = asyncHandler(async (req: AuthenticatedRequest, res: R
 
   return sendSuccess(res, "ایمیل شما تغییر کرد. لطفاً ایمیل جدید خود را تأیید کنید.");
 });
+
 // درخواست تأیید شماره موبایل (تولید توکن)
 export const requestPhoneVerification = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user?.id;
-  const { phone } = req.body;
+  const { phone } = req.body; // الان الزامی شد چون در validation اجباریش کردیم
 
   if (!userId) throw new ApiError(401, "احراز هویت انجام نشده است.");
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new ApiError(404, "کاربر پیدا نشد.");
 
-  if (phone) {
-    const existing = await prisma.user.findUnique({ where: { phone } });
-    if (existing && existing.id !== userId) {
-      throw new ApiError(409, "این شماره موبایل قبلاً ثبت شده است.");
-    }
+  const existing = await prisma.user.findUnique({ where: { phone } });
+  if (existing && existing.id !== userId) {
+    throw new ApiError(409, "این شماره موبایل قبلاً ثبت شده است.");
   }
 
   const verificationToken = generateRefreshToken();
   const hashedToken = hashToken(verificationToken);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+  // اینجا به جای emailVerificationToken، شماره رو داخل خود توکن ذخیره می‌کنیم
   await prisma.emailVerificationToken.create({
     data: {
       userId: user.id,
-      email: phone || user.phone || "unknown",
+      email: `phone-verify:${phone}`, // یه نشانه برای تفکیک از ایمیل
       tokenHash: hashedToken,
       expiresAt,
     },
   });
 
   if (env.NODE_ENV === "development") {
-    console.log(`[DEV ONLY] Phone verification token for ${phone || user.phone}: ${verificationToken}`);
+    console.log(`[DEV ONLY] Phone verification token for ${phone}: ${verificationToken}`);
   }
 
   return sendSuccess(res, "کد تأیید به شماره موبایل شما ارسال شد.");
@@ -578,6 +580,14 @@ export const verifyPhone = asyncHandler(async (req: Request, res: Response) => {
     throw new ApiError(400, "توکن تأیید نامعتبر یا منقضی شده است.");
   }
 
+  // چک می‌کنیم که این توکن واقعاً برای موبایل باشه
+  if (!record.email.startsWith("phone-verify:")) {
+    throw new ApiError(400, "توکن معتبر برای تأیید موبایل نیست.");
+  }
+
+  // شماره‌ای که زمان درخواست توکن ثبت شده رو استخراج می‌کنیم
+  const intendedPhone = record.email.replace("phone-verify:", "");
+
   await prisma.$transaction(async (tx) => {
     await tx.emailVerificationToken.update({
       where: { id: record.id },
@@ -586,7 +596,10 @@ export const verifyPhone = asyncHandler(async (req: Request, res: Response) => {
 
     await tx.user.update({
       where: { id: record.userId },
-      data: { phoneVerifiedAt: new Date() },
+      data: { 
+        phone: intendedPhone, // اینجا شماره تایید شده رو روی کاربر ست می‌کنیم
+        phoneVerifiedAt: new Date() 
+      },
     });
   });
 

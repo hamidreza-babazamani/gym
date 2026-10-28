@@ -30,16 +30,32 @@ export const requestCoach = asyncHandler(async (req: AuthenticatedRequest, res: 
   });
   if (!sport || !sport.isActive) throw new ApiError(400, "رشته ورزشی نامعتبر یا غیرفعال است.");
 
-  const existing = await prisma.coachStudent.findFirst({
-    where: { coachId, studentId, sportId, status: { in: ["PENDING", "ACTIVE"] } },
-  });
-  if (existing) throw new ApiError(409, "شما قبلاً برای این مربی و رشته درخواست داده‌اید یا ارتباط فعال دارید.");
-
-  const request = await prisma.coachStudent.create({
-    data: { coachId, studentId, sportId, initiatedBy: "STUDENT", status: "PENDING" },
+  // F-07 fix: Check for existing relationship (including terminal states)
+  const existing = await prisma.coachStudent.findUnique({
+    where: {
+      coachId_studentId_sportId: { coachId, studentId, sportId },
+    },
   });
 
-  // ارسال اعلان به مربی
+  let request;
+
+  if (existing) {
+    // If active or pending, block
+    if (existing.status === "PENDING" || existing.status === "ACTIVE") {
+      throw new ApiError(409, "شما قبلاً برای این مربی و رشته درخواست داده‌اید یا ارتباط فعال دارید.");
+    }
+    // If terminal state (REJECTED, CANCELLED, ENDED), reactivate as PENDING
+    request = await prisma.coachStudent.update({
+      where: { id: existing.id },
+      data: { status: "PENDING", initiatedBy: "STUDENT", startedAt: null, endedAt: null },
+    });
+  } else {
+    // Create new request
+    request = await prisma.coachStudent.create({
+      data: { coachId, studentId, sportId, initiatedBy: "STUDENT", status: "PENDING" },
+    });
+  }
+
   await createNotification(
     coachId,
     "COACH_REQUEST",
@@ -67,25 +83,29 @@ export const respondToCoachRequest = asyncHandler(async (req: AuthenticatedReque
   });
   if (!request) throw new ApiError(404, "درخواست پیدا نشد یا قبلاً بررسی شده است.");
 
-  const updatedRequest = await prisma.coachStudent.update({
-    where: { id: request.id },
+  // F-06 fix: Atomic update to prevent race conditions
+  const updatedRequest = await prisma.coachStudent.updateMany({
+    where: { id: request.id, status: "PENDING" },
     data: {
       status: decision === "APPROVE" ? "ACTIVE" : "REJECTED",
       ...(decision === "APPROVE" ? { startedAt: new Date() } : {}),
     },
   });
 
-  // ارسال اعلان به شاگرد
+  if (updatedRequest.count === 0) {
+    throw new ApiError(409, "وضعیت این درخواست هم‌اکنون توسط کاربر دیگری تغییر کرده است.");
+  }
+
   await createNotification(
     request.studentId,
     "COACH_REQUEST_RESPONSE",
     decision === "APPROVE" ? "درخواست شما تأیید شد" : "درخواست شما رد شد",
     decision === "APPROVE" ? "مربی درخواست همکاری شما را پذیرفت." : "مربی درخواست همکاری شما را رد کرد.",
-    { requestId: updatedRequest.id, status: updatedRequest.status }
+    { requestId: request.id, status: decision === "APPROVE" ? "ACTIVE" : "REJECTED" }
   );
 
   return sendSuccess(res, decision === "APPROVE" ? "درخواست شاگرد تأیید شد." : "درخواست شاگرد رد شد.", {
-    requestId: updatedRequest.id, status: updatedRequest.status,
+    requestId: request.id, status: decision === "APPROVE" ? "ACTIVE" : "REJECTED",
   });
 });
 
@@ -96,12 +116,15 @@ export const cancelCoachRequest = asyncHandler(async (req: AuthenticatedRequest,
 
   if (!studentId) throw new ApiError(401, "ابتدا وارد حساب کاربری شوید.");
 
-  const request = await prisma.coachStudent.findFirst({
-    where: { id: requestId, studentId, status: "PENDING" }, select: { id: true },
+  // F-06 fix: Atomic update to prevent overwriting a concurrent approval
+  const updatedRequest = await prisma.coachStudent.updateMany({
+    where: { id: requestId, studentId, status: "PENDING" },
+    data: { status: "CANCELLED" },
   });
-  if (!request) throw new ApiError(404, "درخواست پیدا نشد یا قابل لغو نیست.");
 
-  await prisma.coachStudent.update({ where: { id: request.id }, data: { status: "CANCELLED" } });
+  if (updatedRequest.count === 0) {
+    throw new ApiError(404, "درخواست پیدا نشد یا قابل لغو نیست.");
+  }
 
   return sendSuccess(res, "درخواست شما لغو شد.");
 });

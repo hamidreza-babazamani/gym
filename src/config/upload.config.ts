@@ -5,12 +5,19 @@
 import multer from "multer";
 import path from "path";
 import crypto from "crypto";
+import fs from "fs"; // F-16 fix: import fs
 import { ApiError } from "../utils/ApiError";
+
+// F-16 fix: Ensure upload directory exists
+const uploadDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 // تنظیم محل ذخیره‌سازی و نام‌گذاری امن فایل
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, path.join(process.cwd(), "uploads"));
+    cb(null, uploadDir); // F-16 fix: use the ensured directory
   },
   filename: (_req, file, cb) => {
     // تولید نام امن با UUID و پسوند اصلی

@@ -179,13 +179,13 @@ export const compareProgress = asyncHandler(async (req: AuthenticatedRequest, re
     if (!hasAccess) throw new ApiError(403, "شما به این اطلاعات دسترسی ندارید.");
   }
 
-  const startLog = await prisma.progressLog.findFirst({
-    where: { userId, recordedAt: { gte: fromDate } },
+    const startLog = await prisma.progressLog.findFirst({
+    where: { userId, recordedAt: { gte: fromDate, lte: toDate } },
     orderBy: { recordedAt: "asc" },
   });
 
   const endLog = await prisma.progressLog.findFirst({
-    where: { userId, recordedAt: { lte: toDate } },
+    where: { userId, recordedAt: { gte: fromDate, lte: toDate } },
     orderBy: { recordedAt: "desc" },
   });
 

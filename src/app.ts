@@ -4,7 +4,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import { logger } from "./config/logger";
 import { corsOptions } from "./config/cors.config";
-import { globalLimiter, authLimiter } from "./config/rateLimit.config";
+import { globalLimiter, authLimiter, aiLimiter } from "./config/rateLimit.config";
 import healthRoutes from "./routes/health.routes";
 import notFoundMiddleware from "./middlewares/not-found.middleware";
 import errorMiddleware from "./middlewares/error.middleware";
@@ -23,8 +23,6 @@ import { swaggerSpec } from "./config/swagger";
 import progressRoutes from "./routes/progress.routes";
 import paymentRoutes from "./routes/payment.routes";
 import aiRoutes from "./routes/ai.routes";
-import { aiLimiter } from "./config/rateLimit.config";
-
 
 const app = express();
 
@@ -48,12 +46,9 @@ app.use("/api/v1/chats", chatRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/progress", progressRoutes);
 app.use("/api/v1/payments", paymentRoutes);
-app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/ai", aiLimiter, aiRoutes);
-
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
-
 
 export default app;

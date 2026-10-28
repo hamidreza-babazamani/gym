@@ -16,7 +16,7 @@ import { resendVerificationLimiter } from "../config/rateLimit.config";
 import { 
   registerSchema, loginSchema, changePasswordSchema, 
   forgotPasswordSchema, resetPasswordSchema, updateProfileSchema,
-  verifyEmailSchema, changeEmailSchema, verifyPhoneSchema
+  verifyEmailSchema, changeEmailSchema, verifyPhoneSchema, requestPhoneVerificationSchema
 } from "../validations/auth.validation";
 import { z } from "zod";
 
@@ -40,7 +40,7 @@ router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 router.post("/verify-email", validate(verifyEmailSchema), verifyEmail);
 router.post("/resend-verification", resendVerificationLimiter, validate(forgotPasswordSchema), resendVerificationEmail);
-router.post("/request-phone-verification", authMiddleware, requestPhoneVerification);
+router.post("/request-phone-verification", authMiddleware, validate(requestPhoneVerificationSchema), requestPhoneVerification); 
 router.post("/verify-phone", validate(verifyPhoneSchema), verifyPhone);
 
 export default router;

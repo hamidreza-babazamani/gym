@@ -23,9 +23,10 @@ export const createNotification = async (
   body: string,
   data?: any
 ) => {
-  const jobKey = `${userId}-${type}-${title}`;
+  // F-08 fix: Use event identity for deduplication, not just title
+  const eventId = data?.requestId || data?.orderId || data?.id || "";
+  const jobKey = `${userId}-${type}-${eventId || title}-${data ? JSON.stringify(data) : ""}`;
 
-  // ۱. جلوگیری از اضافه شدن کار تکراری به صف
   if (pendingNotificationKeys.has(jobKey)) {
     logger.info(`Notification job already pending: ${jobKey}`);
     return;
@@ -33,19 +34,20 @@ export const createNotification = async (
 
   pendingNotificationKeys.add(jobKey);
 
-  // ۲. اضافه کردن کار به صف
   queue.add(
     "create-notification",
     { userId, type, title, body, data, jobKey },
     async (payload) => {
       try {
-        // ۳. جلوگیری از اعلان تکراری در دیتابیس (در ۵ دقیقه اخیر)
         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        
+        // F-08 fix: Match on event identity (data field), not just title
         const existing = await prisma.notification.findFirst({
           where: {
             userId: payload.userId,
             type: payload.type,
             title: payload.title,
+                    ...(payload.data ? { data: { equals: payload.data } } : {}),
             createdAt: { gte: fiveMinutesAgo },
           },
         });
@@ -68,9 +70,8 @@ export const createNotification = async (
         logger.info(`Notification created: ${payload.jobKey}`);
       } catch (error) {
         logger.error(`Error creating notification (${payload.jobKey}): ${error}`);
-        throw error; // پرتاب خطا برای Retry در صف
+        throw error;
       } finally {
-        // ۴. پاکسازی کلید از مجموعه pending (در هر صورت)
         pendingNotificationKeys.delete(payload.jobKey);
       }
     }
