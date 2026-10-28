@@ -1,41 +1,9 @@
-gym/
-├── prisma/
-│   └── schema.prisma
-│
-├── src/
-│   ├── app.ts
-│   ├── index.ts
-│   │
-│   ├── config/
-│   │   ├── Environment configuration
-│   │   ├── Socket.IO configuration
-│   │   ├── Rate limiting
-│   │   ├── Upload configuration
-│   │   └── Logger
-│   │
-│   ├── controllers/
-│   │   └── Request handlers and business logic
-│   │
-│   ├── routes/
-│   │   └── API routes
-│   │
-│   ├── middlewares/
-│   │   ├── Authentication
-│   │   ├── Role-based access
-│   │   ├── Validation
-│   │   └── Error handling
-│   │
-│   ├── validations/
-│   │   └── Zod schemas
-│   │
-│   ├── utils/
-│   │   ├── Queue
-│   │   ├── Sanitization
-│   │   ├── Membership
-│   │   └── API responses
-│   │
-│   └── lib/
-│       └── prisma.ts
-│
-└── tests/
-    └── Vitest tests
+Gym Backend | بک‌اند باشگاه ورزشی
+1. Project Overview | معرفی پروژه
+English
+
+A production-oriented REST API for a gym management platform, built with TypeScript, Express 5, Prisma, and PostgreSQL. It supports role-based access for students, coaches, admins, and super admins, along with real-time communication and subscription management.
+
+فارسی
+
+یک REST API برای پلتفرم مدیریت باشگاه ورزشی، ساخته‌شده با TypeScript، Express 5، Prisma و PostgreSQL. این پروژه از دسترسی مبتنی بر نقش برای شاگردان، مربیان، مدیران و مدیران ارشد، همچنین ارتباط بلادرنگ و مدیریت اشتراک‌ها پشتیبانی می‌کند.
